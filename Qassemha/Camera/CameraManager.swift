@@ -21,12 +21,14 @@ class CameraManager: NSObject, ObservableObject {
     @Published var extractedText = ""
     @Published var isProcessing = false
     @Published var error: CameraError?
+    @Published var isSessionReady = false
 
     var captureSession: AVCaptureSession?
     private var videoOutput: AVCaptureVideoDataOutput?
     private var photoOutput: AVCapturePhotoOutput?
     private var currentDevice: AVCaptureDevice?
-    private let sessionQueue = DispatchQueue(label: "camera.session.queue")
+    private let sessionQueue = DispatchQueue(label: "camera.session.queue", qos: .userInitiated)
+    private var isSessionConfigured = false
 
     enum CameraError: LocalizedError {
         case unauthorized
@@ -76,13 +78,41 @@ class CameraManager: NSObject, ObservableObject {
 
     func startSession() {
         sessionQueue.async { [weak self] in
-            self?.setupCaptureSession()
+            guard let self = self else { return }
+
+            // If session is already configured, just start it
+            if self.isSessionConfigured, let session = self.captureSession {
+                if !session.isRunning {
+                    session.startRunning()
+                    DispatchQueue.main.async {
+                        self.isSessionReady = true
+                    }
+                }
+            } else {
+                // First time setup
+                self.setupCaptureSession()
+            }
         }
     }
 
     func stopSession() {
         sessionQueue.async { [weak self] in
+            // Don't stop the session, just pause it for faster restart
+            // self?.captureSession?.stopRunning()
+
+            // Actually, let's stop it to save battery
             self?.captureSession?.stopRunning()
+            DispatchQueue.main.async {
+                self?.isSessionReady = false
+            }
+        }
+    }
+
+    // Pre-configure the camera session for faster startup
+    func prepareSession() {
+        guard !isSessionConfigured else { return }
+        sessionQueue.async { [weak self] in
+            self?.setupCaptureSession()
         }
     }
 
@@ -94,50 +124,75 @@ class CameraManager: NSObject, ObservableObject {
             return
         }
 
-        let session = AVCaptureSession()
+        // Reuse existing session if available
+        let session: AVCaptureSession
+        if let existingSession = self.captureSession {
+            session = existingSession
+        } else {
+            session = AVCaptureSession()
+            self.captureSession = session
+        }
+
         session.beginConfiguration()
 
-        // Configure session preset
-        if session.canSetSessionPreset(.photo) {
-            session.sessionPreset = .photo
+        // Use a lower preset for faster startup, optimize for speed
+        if session.canSetSessionPreset(.high) {
+            session.sessionPreset = .high  // Faster than .photo
         }
 
-        // Add camera input
-        guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-              let cameraInput = try? AVCaptureDeviceInput(device: camera) else {
-            DispatchQueue.main.async { [weak self] in
-                self?.error = .configurationFailed
-                self?.isCameraUnavailable = true
+        // Only configure if not already configured
+        if !isSessionConfigured {
+            // Add camera input
+            guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+                  let cameraInput = try? AVCaptureDeviceInput(device: camera) else {
+                DispatchQueue.main.async { [weak self] in
+                    self?.error = .configurationFailed
+                    self?.isCameraUnavailable = true
+                }
+                session.commitConfiguration()
+                return
             }
-            session.commitConfiguration()
-            return
-        }
 
-        if session.canAddInput(cameraInput) {
-            session.addInput(cameraInput)
-            currentDevice = camera
-        }
+            if session.canAddInput(cameraInput) {
+                session.addInput(cameraInput)
+                currentDevice = camera
+            }
 
-        // Add photo output
-        let photoOutput = AVCapturePhotoOutput()
-        if session.canAddOutput(photoOutput) {
-            session.addOutput(photoOutput)
-            self.photoOutput = photoOutput
-        }
+            // Add photo output (priority for receipt capture)
+            let photoOutput = AVCapturePhotoOutput()
+            if session.canAddOutput(photoOutput) {
+                session.addOutput(photoOutput)
+                self.photoOutput = photoOutput
+            }
 
-        // Add video output for barcode scanning
-        let videoOutput = AVCaptureVideoDataOutput()
-        videoOutput.setSampleBufferDelegate(self, queue: sessionQueue)
-        if session.canAddOutput(videoOutput) {
-            session.addOutput(videoOutput)
-            self.videoOutput = videoOutput
+            // Defer video output setup to after camera starts (optimization)
+            // This reduces initial startup time since barcode scanning is not immediate priority
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.sessionQueue.async {
+                    guard let self = self, let session = self.captureSession else { return }
+
+                    if self.videoOutput == nil {
+                        let videoOutput = AVCaptureVideoDataOutput()
+                        videoOutput.setSampleBufferDelegate(self, queue: self.sessionQueue)
+
+                        session.beginConfiguration()
+                        if session.canAddOutput(videoOutput) {
+                            session.addOutput(videoOutput)
+                            self.videoOutput = videoOutput
+                        }
+                        session.commitConfiguration()
+                    }
+                }
+            }
+
+            isSessionConfigured = true
         }
 
         session.commitConfiguration()
-        self.captureSession = session
 
         DispatchQueue.main.async { [weak self] in
             self?.isCameraUnavailable = false
+            self?.isSessionReady = true
         }
 
         session.startRunning()

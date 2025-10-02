@@ -11,7 +11,7 @@ import SwiftUI
 // MARK: - Receipt Data Models
 
 struct Receipt: Identifiable, Codable, Equatable {
-    let id = UUID()
+    let id: UUID
     var storeName: String
     var storeAddress: String?
     var date: Date
@@ -25,6 +25,23 @@ struct Receipt: Identifiable, Codable, Equatable {
     var imageData: Data?
     var scanType: ScanType
     var category: ReceiptCategory
+
+    init(id: UUID = UUID(), storeName: String, storeAddress: String? = nil, date: Date, items: [ReceiptItem], subtotal: Double, tax: Double, tip: Double, total: Double, currency: String, receiptNumber: String? = nil, imageData: Data? = nil, scanType: ScanType, category: ReceiptCategory) {
+        self.id = id
+        self.storeName = storeName
+        self.storeAddress = storeAddress
+        self.date = date
+        self.items = items
+        self.subtotal = subtotal
+        self.tax = tax
+        self.tip = tip
+        self.total = total
+        self.currency = currency
+        self.receiptNumber = receiptNumber
+        self.imageData = imageData
+        self.scanType = scanType
+        self.category = category
+    }
 
     enum ScanType: String, CaseIterable, Codable {
         case camera = "camera"
@@ -69,7 +86,7 @@ struct Receipt: Identifiable, Codable, Equatable {
 }
 
 struct ReceiptItem: Identifiable, Codable, Equatable {
-    let id = UUID()
+    let id: UUID
     var name: String
     var quantity: Double
     var unitPrice: Double
@@ -77,7 +94,19 @@ struct ReceiptItem: Identifiable, Codable, Equatable {
     var category: ItemCategory
     var tags: [String]
     var notes: String?
-    var isEdited: Bool = false
+    var isEdited: Bool
+
+    init(id: UUID = UUID(), name: String, quantity: Double, unitPrice: Double, totalPrice: Double, category: ItemCategory, tags: [String], notes: String? = nil, isEdited: Bool = false) {
+        self.id = id
+        self.name = name
+        self.quantity = quantity
+        self.unitPrice = unitPrice
+        self.totalPrice = totalPrice
+        self.category = category
+        self.tags = tags
+        self.notes = notes
+        self.isEdited = isEdited
+    }
 
     enum ItemCategory: String, CaseIterable, Codable {
         case food = "Food"

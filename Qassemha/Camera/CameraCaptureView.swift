@@ -9,13 +9,19 @@ import SwiftUI
 import AVFoundation
 
 struct CameraCaptureView: View {
-    @StateObject private var cameraManager = CameraManager()
+    @ObservedObject var cameraManager: CameraManager
     @Binding var isPresented: Bool
     @Binding var capturedReceipt: Receipt?
 
     @State private var showingImagePicker = false
     @State private var showingPermissionAlert = false
     @State private var zoomFactor: CGFloat = 1.0
+
+    init(cameraManager: CameraManager? = nil, isPresented: Binding<Bool>, capturedReceipt: Binding<Receipt?>) {
+        self.cameraManager = cameraManager ?? CameraManager()
+        self._isPresented = isPresented
+        self._capturedReceipt = capturedReceipt
+    }
 
 
     var body: some View {
@@ -24,7 +30,7 @@ struct CameraCaptureView: View {
 
             if cameraManager.isCameraAuthorized && !cameraManager.isCameraUnavailable {
                 // Camera Preview
-                if let session = cameraManager.captureSession {
+                if cameraManager.isSessionReady, let session = cameraManager.captureSession {
                     CameraPreview(session: session)
                         .ignoresSafeArea()
                         .scaleEffect(zoomFactor)
@@ -34,6 +40,17 @@ struct CameraCaptureView: View {
                                     zoomFactor = min(max(value, 1.0), 5.0)
                                 }
                         )
+                } else {
+                    // Loading state while camera is initializing
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.5)
+
+                        Text("Initializing Camera...")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white)
+                    }
                 }
 
                 // Overlay UI
@@ -309,5 +326,5 @@ struct ImagePicker: UIViewControllerRepresentable {
 }
 
 #Preview {
-    CameraCaptureView(isPresented: .constant(true), capturedReceipt: .constant(nil))
+    CameraCaptureView(cameraManager: nil, isPresented: .constant(true), capturedReceipt: .constant(nil))
 }

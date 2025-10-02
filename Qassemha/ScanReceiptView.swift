@@ -7,15 +7,19 @@
 
 import SwiftUI
 import AVFoundation
+import Combine
 
 struct ScanReceiptView: View {
     @StateObject private var demoData = DemoReceiptData.shared
+    @StateObject private var cameraManager = CameraManager()
     @State private var isAnimating = false
     @State private var showingCamera = false
     @State private var showingManualEntry = false
     @State private var showingReceiptReview = false
+    @State private var showingAllReceipts = false
     @State private var capturedReceipt: Receipt?
     @State private var recentReceipts: [Receipt] = []
+    @State private var totalReceiptsCount = 0
     @State private var cameraPermissionStatus: AVAuthorizationStatus = .notDetermined
     @State private var showingCameraPermissionAlert = false
 
@@ -127,8 +131,16 @@ struct ScanReceiptView: View {
 
                         Spacer()
 
-                        Button("View All") {
-                            // View all action - could navigate to history tab
+                        Button(action: {
+                            showingAllReceipts = true
+                        }) {
+                            HStack(spacing: 4) {
+                                Text("View All")
+                                if totalReceiptsCount > 0 {
+                                    Text("(\(totalReceiptsCount))")
+                                        .fontWeight(.semibold)
+                                }
+                            }
                         }
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.blue)
@@ -183,38 +195,36 @@ struct ScanReceiptView: View {
                 isAnimating = true
                 loadRecentReceipts()
                 requestCameraPermission()
-            }
-        }
-        .fullScreenCover(isPresented: $showingCamera) {
-            CameraCaptureView(isPresented: $showingCamera, capturedReceipt: $capturedReceipt)
-        }
-        .sheet(isPresented: $showingManualEntry) {
-            NavigationView {
-                VStack {
-                    Text("Manual Item Entry")
-                        .font(.title)
-                        .padding()
 
-                    Spacer()
-
-                    Text("Manual item entry functionality will be implemented here")
-                        .foregroundColor(.secondary)
-                        .padding()
-
-                    Spacer()
-                }
-                .navigationTitle("Add Items")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Cancel") {
-                            showingManualEntry = false
-                        }
+                // Pre-warm camera for faster first launch
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    if cameraPermissionStatus == .authorized {
+                        cameraManager.prepareSession()
                     }
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .receiptSaved)) { notification in
+                // Refresh recent receipts when a new receipt is saved
+                withAnimation(.spring()) {
+                    loadRecentReceipts()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .receiptDeleted)) { notification in
+                // Refresh recent receipts when a receipt is deleted
+                withAnimation(.spring()) {
+                    loadRecentReceipts()
+                }
+            }
         }
-        .sheet(isPresented: $showingReceiptReview) {
+        .fullScreenCover(isPresented: $showingCamera) {
+            CameraCaptureView(cameraManager: cameraManager, isPresented: $showingCamera, capturedReceipt: $capturedReceipt)
+        }
+        .sheet(isPresented: $showingManualEntry) {
+            ManualItemEntryView()
+        }
+        .sheet(isPresented: $showingReceiptReview, onDismiss: {
+            capturedReceipt = nil
+        }) {
             if let receipt = capturedReceipt {
                 ReceiptReviewView(
                     receipt: .constant(receipt),
@@ -222,12 +232,11 @@ struct ScanReceiptView: View {
                 )
             }
         }
+        .sheet(isPresented: $showingAllReceipts) {
+            AllReceiptsView()
+        }
         .onChange(of: capturedReceipt) { newReceipt in
-            if let newReceipt = newReceipt {
-                recentReceipts.insert(newReceipt, at: 0)
-                if recentReceipts.count > 10 {
-                    recentReceipts = Array(recentReceipts.prefix(10))
-                }
+            if newReceipt != nil {
                 showingReceiptReview = true
             }
         }
@@ -244,13 +253,9 @@ struct ScanReceiptView: View {
     }
 
     private func loadRecentReceipts() {
-        // In a real app, this would load from Core Data or UserDefaults
-        // For demo purposes, we'll start with some sample data after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            if recentReceipts.isEmpty {
-                recentReceipts = Array(demoData.sampleReceipts.prefix(2))
-            }
-        }
+        let allReceipts = CoreDataManager.shared.getSavedReceipts()
+        totalReceiptsCount = allReceipts.count
+        recentReceipts = Array(allReceipts.prefix(3))
     }
 
     private func requestCameraPermission() {
@@ -304,26 +309,48 @@ struct RecentScanCard: View {
                         .foregroundColor(.primary)
                         .lineLimit(1)
 
-                    HStack {
-                        Text("\(receipt.items.count) items")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.secondary)
+                    HStack(spacing: 6) {
+                        // Category badge
+                        HStack(spacing: 3) {
+                            Image(systemName: receipt.category.icon)
+                                .font(.system(size: 10, weight: .medium))
+                            Text(receipt.category.rawValue)
+                                .font(.system(size: 11, weight: .medium))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(receipt.category.color)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(receipt.category.color.opacity(0.15))
+                        .cornerRadius(4)
 
                         Text("•")
-                            .foregroundColor(.secondary)
-
-                        Image(systemName: receipt.scanType.icon)
                             .font(.system(size: 12))
                             .foregroundColor(.secondary)
 
-                        Text(receipt.scanType.description)
-                            .font(.system(size: 14, weight: .medium))
+                        Text("\(receipt.items.count) items")
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
                     }
+                    .lineLimit(1)
 
-                    Text(receipt.formattedDate)
-                        .font(.system(size: 12, weight: .medium))
+                    HStack(spacing: 6) {
+                        Text(receipt.formattedDate)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+
+                        Text("•")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+
+                        HStack(spacing: 3) {
+                            Image(systemName: receipt.scanType.icon)
+                                .font(.system(size: 11))
+                            Text(receipt.scanType.description)
+                                .font(.system(size: 13, weight: .medium))
+                        }
                         .foregroundColor(.secondary)
+                    }
                 }
 
                 Spacer()
