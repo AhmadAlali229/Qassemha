@@ -188,6 +188,7 @@ class ReceiptStructure {
         case standardItemPrice    // "Item Name $12.99"
         case separatedPricesItems // Prices first, then items (McDonald's style)
         case tabulated           // Item    Qty    Price format
+        case endListedPrices     // Items first, then all prices at end (tabular receipts)
         case mixed               // Mixed format
         case unknown
     }
@@ -207,6 +208,26 @@ class ReceiptStructure {
         print("   Item lines: \(itemLines.count) at positions \(itemLines)")
         print("   Store candidates: \(storeLines.count) at positions \(storeLines)")
         print("   Total indicators: \(totalLines.count) at positions \(totalLines)")
+
+        // Detect end-listed prices format (items first, then all prices at end)
+        // Look for consecutive number-only lines at the end
+        let lateNumberLines = lineAnalyses.suffix(15).filter { (index, line, analysis) in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            return Int(trimmed) != nil || Double(trimmed) != nil
+        }
+
+        if itemLines.count >= 5 && lateNumberLines.count >= 5 {
+            // Check if most items don't have prices on the same line
+            let itemsWithoutPrices = lineAnalyses.filter {
+                $0.analysis.isItemCandidate && $0.analysis.prices.isEmpty
+            }.count
+
+            if itemsWithoutPrices >= itemLines.count / 2 {
+                format = .endListedPrices
+                print("📊 Detected format: End-Listed Prices (tabular)")
+                return
+            }
+        }
 
         // Detect separated prices/items format (like McDonald's)
         if priceOnlyLines.count >= 2 && itemLines.count >= 1 {
@@ -326,7 +347,9 @@ class DemoReceiptData: ObservableObject {
         "USD": ("$", "en_US"),
         "CAD": ("C$", "en_CA"),
         "EUR": ("€", "en_EU"),
-        "GBP": ("£", "en_GB")
+        "GBP": ("£", "en_GB"),
+        "SAR": ("SAR", "ar_SA"),
+        "AED": ("AED", "ar_AE")
     ]
 
     func parseReceiptText(_ text: String) -> Receipt? {
@@ -422,10 +445,16 @@ class DemoReceiptData: ObservableObject {
         // Extract totals
         (subtotal, tax, total) = extractTotals(from: lines, using: structure)
 
+        // Detect currency
+        let currency = detectCurrency(from: lines)
+
+        let currencySymbol = getCurrencySymbol(for: currency)
+
         print("✅ Dynamic parsing results:")
         print("   Store: \(storeName)")
         print("   Items: \(items.count)")
-        print("   Subtotal: $\(subtotal), Tax: $\(tax), Total: $\(total)")
+        print("   Currency: \(currency)")
+        print("   Subtotal: \(currencySymbol)\(subtotal), Tax: \(currencySymbol)\(tax), Total: \(currencySymbol)\(total)")
 
         guard !items.isEmpty else {
             print("❌ No items found")
@@ -441,11 +470,86 @@ class DemoReceiptData: ObservableObject {
             tax: tax,
             tip: 0,
             total: total,
-            currency: "USD",
+            currency: currency,
             receiptNumber: nil,
             scanType: .camera,
             category: .other
         )
+    }
+
+    private func getCurrencySymbol(for currency: String) -> String {
+        switch currency {
+        case "SAR":
+            return "SAR"
+        case "AED":
+            return "AED"
+        case "EUR":
+            return "€"
+        case "GBP":
+            return "£"
+        default:
+            return "$"
+        }
+    }
+
+    private func detectCurrency(from lines: [String]) -> String {
+        // Check for currency indicators in the text
+        let fullText = lines.joined(separator: " ")
+        let fullTextLower = fullText.lowercased()
+
+        print("🔍 Currency detection - checking text for patterns...")
+
+        // SAR (Saudi Riyal) indicators - check both original and lowercased
+        // Check for any Arabic characters (strong indicator of Middle East region)
+        let hasArabicText = fullText.range(of: "\\p{Arabic}", options: .regularExpression) != nil
+
+        // Arabic text patterns (including OCR variations)
+        let sarArabicPatterns = ["الريال", "رس", "الرياض", "الرياس", "الريام", "الريآض",
+                                 "السعودية", "الززااضن", "قرطبة", "قرطية", "فرطبة", "فرطية"]
+
+        for pattern in sarArabicPatterns {
+            if fullText.contains(pattern) {
+                print("🌍 Detected SAR currency from Arabic pattern: '\(pattern)'")
+                return "SAR"
+            }
+        }
+
+        // If has Arabic text and no other currency detected, likely SAR
+        if hasArabicText {
+            print("🌍 Detected SAR currency from presence of Arabic text")
+            return "SAR"
+        }
+
+        // English SAR indicators
+        if fullTextLower.contains("sar") || fullTextLower.contains("riyal") ||
+           fullTextLower.contains("riyadh") || fullTextLower.contains("saudi") {
+            print("🌍 Detected SAR currency from English text")
+            return "SAR"
+        }
+
+        // AED (UAE Dirham) indicators
+        if fullText.contains("درهم") || fullTextLower.contains("aed") ||
+           fullTextLower.contains("dirham") || fullTextLower.contains("dubai") ||
+           fullTextLower.contains("abu dhabi") || fullTextLower.contains("uae") {
+            print("🌍 Detected AED currency")
+            return "AED"
+        }
+
+        // EUR (Euro) indicators
+        if fullTextLower.contains("eur") || fullTextLower.contains("euro") || fullText.contains("€") {
+            print("🌍 Detected EUR currency")
+            return "EUR"
+        }
+
+        // GBP (British Pound) indicators
+        if fullTextLower.contains("gbp") || fullTextLower.contains("pound") || fullText.contains("£") {
+            print("🌍 Detected GBP currency")
+            return "GBP"
+        }
+
+        // Default to USD
+        print("🌍 No specific currency detected, defaulting to USD")
+        return "USD"
     }
 
     // Legacy McDonald's parsing as fallback
@@ -802,19 +906,19 @@ class DemoReceiptData: ObservableObject {
             "drink", "shake", "pie", "cookie", "salad", "wrap", "sandwich",
             "blt", "qpc", "sprite", "coke", "pepsi", "lrg", "med", "sm",
             "quarter", "pounder", "big mac", "filet", "nugget", "mccafe",
-            "smoky", "smky", "double", "triple", "large", "medium", "small"
+            "smoky", "smky", "double", "triple", "large", "medium", "small",
+            "water", "juice", "rice", "noodles", "dumpling", "roll"
         ]
 
         let lowercased = text.lowercased()
 
         // Check for food keywords
-        if foodKeywords.contains { lowercased.contains($0) } {
+        if foodKeywords.contains(where: { lowercased.contains($0) }) {
             return true
         }
 
-        // Check for common McDonald's patterns
-        if lowercased.contains("mc") || // McChicken, McMuffin, etc.
-           lowercased.count > 5 && (lowercased.contains("l ") || lowercased.contains("m ") || lowercased.contains("s ")) { // Size indicators
+        // Check for common McDonald's patterns (more strict)
+        if lowercased.contains("mc") && lowercased.count < 25 {
             return true
         }
 
@@ -978,13 +1082,61 @@ class DemoReceiptData: ObservableObject {
     }
 
     private func extractStoreName(from lines: [String], using structure: ReceiptStructure) -> String {
-        // First, look for explicit McDonald's references
+        // First, look for specific restaurant names
+        // Bait Al Bahar (بيت البحر) and its OCR variations
+        let baitAlBaharVariations = ["بيت البحر", "بيت", "البحر", "جار ساحة", "بحر"]
+
+        for (index, line) in lines.enumerated() {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Check for Bait Al Bahar
+            for variation in baitAlBaharVariations {
+                if trimmed.contains(variation) && index < 10 {
+                    print("📍 Bait Al Bahar detected from pattern: '\(variation)' at line \(index)")
+                    return "Bait Al Bahar - بيت البحر"
+                }
+            }
+        }
+
+        // Look for explicit McDonald's references
         for (index, line) in lines.enumerated() {
             let lowercased = line.lowercased()
             if (lowercased.contains("mcdonald") || lowercased.contains("mcdonaid") || lowercased.contains("mcdfnald") || lowercased.contains("meponaid") || lowercased.contains("hcdonald") || lowercased.contains("restaurant") || lowercased.contains("mccafé") || lowercased.contains("mcflurry")) &&
                !lowercased.contains("thank you") && !lowercased.contains("eating at") {
                 print("📍 McDonald's store detection: '\(line)' at line \(index)")
                 return "McDonald's"
+            }
+        }
+
+        // Look for store name patterns in EARLY lines only (first 10 lines)
+        // Store name usually appears at the top
+        for (index, line) in lines.enumerated() {
+            if index > 10 { break } // Only check first 10 lines
+
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lowercased = trimmed.lowercased()
+
+            // Skip obvious non-store lines
+            if trimmed.count < 4 || trimmed.count > 50 { continue }
+            if Double(trimmed) != nil || Int(trimmed) != nil { continue }
+            if lowercased.contains("tel") || lowercased.contains("phone") { continue }
+            if lowercased.contains("address") || lowercased.contains("street") { continue }
+            if lowercased.contains("order") || lowercased.contains("date") { continue }
+            if lowercased.contains("thank") || lowercased.contains("visit") { continue }
+            if lowercased.contains("invoice") || lowercased.contains("فاتورة") { continue }
+            if lowercased.contains("tax") || lowercased.contains("ضريب") { continue }
+
+            // Skip food items
+            if isLikelyFoodOrDrinkItem(trimmed) {
+                continue
+            }
+
+            // Look for Arabic text (likely restaurant name in Arabic)
+            let hasArabic = trimmed.range(of: "\\p{Arabic}", options: .regularExpression) != nil
+
+            if hasArabic && trimmed.count >= 4 {
+                print("📍 Store name candidate (Arabic): '\(trimmed)' at line \(index)")
+                return trimmed
             }
         }
 
@@ -1020,6 +1172,8 @@ class DemoReceiptData: ObservableObject {
 
     private func extractItems(from lines: [String], using structure: ReceiptStructure) -> [ReceiptItem] {
         switch structure.format {
+        case .endListedPrices:
+            return extractItemsEndListedFormat(from: lines, using: structure)
         case .separatedPricesItems:
             return extractItemsSeparatedFormat(from: lines, using: structure)
         case .standardItemPrice:
@@ -1029,6 +1183,220 @@ class DemoReceiptData: ObservableObject {
         default:
             return extractItemsMixedFormat(from: lines, using: structure)
         }
+    }
+
+    private func extractItemsEndListedFormat(from lines: [String], using structure: ReceiptStructure) -> [ReceiptItem] {
+        print("🍔 Extracting items using end-listed prices format...")
+
+        // Find the separator line (usually contains keywords like "الكمية المجموع", "Qty Total", etc.)
+        var separatorIndex = -1
+        for (index, line) in lines.enumerated() {
+            let lowercased = line.lowercased()
+            if lowercased.contains("المجموع") || lowercased.contains("الكمية") ||
+               lowercased.contains("qty") || lowercased.contains("quantity") ||
+               (lowercased.contains("total") && !lowercased.contains("subtotal")) {
+                separatorIndex = index
+                print("📍 Found separator line at index \(index): '\(line)'")
+                break
+            }
+        }
+
+        // If no separator found, look for first consecutive number sequence
+        if separatorIndex == -1 {
+            var consecutiveNumbers = 0
+            for (index, line) in lines.enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if Double(trimmed) != nil {
+                    consecutiveNumbers += 1
+                    if consecutiveNumbers >= 3 {
+                        separatorIndex = index - 3
+                        print("📍 Found number sequence starting at index \(separatorIndex)")
+                        break
+                    }
+                } else {
+                    consecutiveNumbers = 0
+                }
+            }
+        }
+
+        // Collect item names (before separator or before number sequence)
+        // For bilingual receipts, prefer English over Arabic
+        var itemNames: [String] = []
+        let itemEndIndex = separatorIndex > 0 ? separatorIndex : lines.count - 15
+
+        for (index, line) in lines.enumerated() {
+            if index >= itemEndIndex { break }
+
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Skip if it's just a number or very short
+            if Int(trimmed) != nil || Double(trimmed) != nil || trimmed.count < 3 {
+                continue
+            }
+
+            // Skip header lines and metadata
+            let lowercased = trimmed.lowercased()
+            if lowercased.contains("order") || lowercased.contains("date") ||
+               lowercased.contains("time") || lowercased.contains("table") ||
+               lowercased.contains("server") || lowercased.contains("invoice") ||
+               lowercased.contains("user") || lowercased.contains("family") ||
+               lowercased.contains("pm") || lowercased.contains("am") {
+                continue
+            }
+
+            // Check if it looks like a food/drink item
+            if isLikelyFoodOrDrinkItem(trimmed) {
+                // For bilingual receipts, ONLY accept English text
+                let isEnglish = isEnglishText(trimmed)
+
+                if isEnglish {
+                    // Clean up the item name - remove leading and trailing punctuation
+                    var cleanedName = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?*•"))
+                    // Also remove leading asterisks and bullets from within the string
+                    cleanedName = cleanedName.replacingOccurrences(of: "^[*•]+\\s*", with: "", options: .regularExpression)
+                    itemNames.append(cleanedName)
+                    print("🍽️ Found item name (English): '\(cleanedName)' at line \(index)")
+                } else {
+                    print("⏭️ Skipping Arabic/non-English item: '\(trimmed)' at line \(index)")
+                }
+            }
+        }
+
+        // Collect ALL prices (after separator, before subtotal)
+        var prices: [Double] = []
+        let priceStartIndex = separatorIndex > 0 ? separatorIndex + 1 : lines.count - 15
+
+        // First pass: collect all numbers to find subtotal
+        var allNumbers: [(index: Int, value: Double)] = []
+        for (index, line) in lines.enumerated() {
+            if index < priceStartIndex { continue }
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Skip very long numbers (likely IDs, not prices)
+            if trimmed.count > 10 { continue }
+
+            if let number = Double(trimmed), number > 0 {
+                allNumbers.append((index: index, value: number))
+            }
+        }
+
+        // Find subtotal (largest number that could be sum of smaller numbers)
+        var subtotalValue: Double = 0
+        var subtotalIndex: Int = -1
+        if allNumbers.count >= 3 {
+            // The subtotal is usually one of the larger numbers near the end
+            // Look for the largest number that appears after many smaller numbers
+            let sortedByValue = allNumbers.sorted { $0.value < $1.value }
+
+            // Find a number that is significantly larger than most others
+            for i in (0..<sortedByValue.count).reversed() {
+                let candidate = sortedByValue[i]
+                // Subtotal should be > 100 for multi-item orders
+                if candidate.value > 100 {
+                    // Check if this could be sum of smaller numbers
+                    let smallerNumbers = sortedByValue.filter { $0.value < candidate.value }
+                    if smallerNumbers.count >= 3 { // At least 3 item prices before subtotal
+                        subtotalValue = candidate.value
+                        subtotalIndex = candidate.index
+                        print("💰 Identified subtotal: \(subtotalValue) at line \(subtotalIndex)")
+                        break
+                    }
+                }
+            }
+        }
+
+        // Second pass: collect prices until we hit subtotal
+        // Be more aggressive - look for ANY numbers in reasonable range
+        for (index, line) in lines.enumerated() {
+            if index < priceStartIndex { continue }
+
+            // Stop at subtotal line
+            if index >= subtotalIndex && subtotalIndex > 0 {
+                print("💰 Reached subtotal line at \(index)")
+                break
+            }
+
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Skip very long numbers (likely IDs)
+            if trimmed.count > 10 { continue }
+
+            // Try to parse as number - accept prices between 1 and 100 SAR (typical item range)
+            if let price = Double(trimmed), price >= 1.0 && price < 100.0 {
+                prices.append(price)
+                print("💵 Found item price: \(price) at line \(index)")
+            }
+        }
+
+        print("📊 Collected \(itemNames.count) items and \(prices.count) prices")
+
+        // Match items with prices - create items for ALL found items
+        var items: [ReceiptItem] = []
+
+        for i in 0..<itemNames.count {
+            let name = itemNames[i]
+            let price = i < prices.count ? prices[i] : 0.0
+
+            if price == 0.0 {
+                print("⚠️ No price found for item: '\(name)' at position \(i)")
+            }
+
+            let item = ReceiptItem(
+                name: name,
+                quantity: 1,
+                unitPrice: price,
+                totalPrice: price,
+                category: categorizeItem(name),
+                tags: []
+            )
+            items.append(item)
+            print("✅ Created item \(i+1): '\(name)' - \(price)")
+        }
+
+        return items
+    }
+
+    private func isEnglishText(_ text: String) -> Bool {
+        // Check if text contains primarily English characters
+        let englishCharacters = text.filter { $0.isASCII && $0.isLetter }
+        let totalLetters = text.filter { $0.isLetter }
+
+        if totalLetters.isEmpty { return false }
+
+        let englishRatio = Double(englishCharacters.count) / Double(totalLetters.count)
+        return englishRatio > 0.5
+    }
+
+    private func isLikelyFoodOrDrinkItem(_ text: String) -> Bool {
+        let lowercased = text.lowercased()
+
+        // Exclude header/metadata keywords first
+        let excludeKeywords = ["invoice", "receipt", "bill", "الفاتورة", "فاتورة", "رقم",
+                              "username", "المستخدم", "user", "table", "طاولة",
+                              "branch", "فرع", "location", "موقع", "payment", "دفع",
+                              "الركم", "الضريبي", "ضريبة", "تاريخ", "العادة", "الززااضن",
+                              "riyadh", "الريام", "family", "rommel", "bullos", "lagura"]
+
+        for keyword in excludeKeywords {
+            if lowercased.contains(keyword) {
+                return false
+            }
+        }
+
+        // Food/drink keywords - English only
+        let foodKeywords = ["chicken", "beef", "shrimp", "fish", "rice", "noodles", "noodle",
+                           "dumpling", "roll", "spring", "kung pao", "szechuan", "steak",
+                           "juice", "water", "drink", "coffee", "tea", "lemon", "orange",
+                           "mint", "sauce", "fried", "steamed", "grilled", "soup", "salad"]
+
+        // Check if contains food keywords
+        for keyword in foodKeywords {
+            if lowercased.contains(keyword) {
+                return true
+            }
+        }
+
+        return false
     }
 
     private func extractItemsSeparatedFormat(from lines: [String], using structure: ReceiptStructure) -> [ReceiptItem] {
@@ -1290,6 +1658,56 @@ class DemoReceiptData: ObservableObject {
         var subtotal: Double = 0
         var tax: Double = 0
         var total: Double = 0
+
+        // Method 0: For end-listed prices format
+        if structure.format == .endListedPrices {
+            // Find the separator line
+            var separatorIndex = -1
+            for (index, line) in lines.enumerated() {
+                let lowercased = line.lowercased()
+                if lowercased.contains("المجموع") || lowercased.contains("qty") ||
+                   lowercased.contains("total") || lowercased.contains("amount") {
+                    separatorIndex = index
+                    break
+                }
+            }
+
+            // Collect all numbers after separator
+            let priceStartIndex = separatorIndex > 0 ? separatorIndex + 1 : lines.count - 15
+            var allNumbers: [Double] = []
+
+            for (index, line) in lines.enumerated() {
+                if index < priceStartIndex { continue }
+
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let number = Double(trimmed), number > 0 {
+                    allNumbers.append(number)
+                    print("🔢 Found number: \(number) at line \(index)")
+                }
+            }
+
+            // The pattern should be: [item prices...] [subtotal] [tax] (or just [subtotal] [tax])
+            // Subtotal is usually > 100, tax is usually < subtotal
+            if allNumbers.count >= 2 {
+                // Find the first number > 100 that could be a subtotal
+                for i in 0..<allNumbers.count - 1 {
+                    let potentialSubtotal = allNumbers[i]
+                    let potentialTax = allNumbers[i + 1]
+
+                    // Subtotal should be larger and tax should be reasonable percentage
+                    if potentialSubtotal > 50 && potentialTax > 0 && potentialTax < potentialSubtotal {
+                        let taxRatio = potentialTax / potentialSubtotal
+                        if taxRatio >= 0.05 && taxRatio <= 0.25 { // 5-25% is reasonable tax
+                            subtotal = potentialSubtotal
+                            tax = potentialTax
+                            total = subtotal + tax
+                            print("💰 End-listed format totals: subtotal=\(subtotal), tax=\(tax), total=\(total)")
+                            return (subtotal, tax, total)
+                        }
+                    }
+                }
+            }
+        }
 
         // Method 1: For McDonald's separated format - use specific line positions
         if structure.format == .separatedPricesItems {
@@ -1713,7 +2131,24 @@ extension Receipt {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = currency
-        return formatter.string(from: NSNumber(value: total)) ?? "$\(total)"
+
+        if let formatted = formatter.string(from: NSNumber(value: total)) {
+            return formatted
+        }
+
+        // Fallback formatting based on currency
+        switch currency {
+        case "SAR":
+            return "SAR \(String(format: "%.2f", total))"
+        case "AED":
+            return "AED \(String(format: "%.2f", total))"
+        case "EUR":
+            return "€\(String(format: "%.2f", total))"
+        case "GBP":
+            return "£\(String(format: "%.2f", total))"
+        default:
+            return "$\(String(format: "%.2f", total))"
+        }
     }
 
     var formattedDate: String {

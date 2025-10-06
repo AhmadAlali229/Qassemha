@@ -163,7 +163,7 @@ struct ReceiptReviewView: View {
                         } else {
                             LazyVStack(spacing: 1) {
                                 ForEach(receipt.items) { item in
-                                    ReceiptItemRow(item: item)
+                                    ReceiptItemRow(item: item, currency: receipt.currency)
                                 }
                             }
                             .background(.white)
@@ -182,11 +182,11 @@ struct ReceiptReviewView: View {
                         }
 
                         VStack(spacing: 8) {
-                            SummaryRow(title: "Subtotal", amount: receipt.subtotal)
-                            SummaryRow(title: "Tax", amount: receipt.tax)
+                            SummaryRow(title: "Subtotal", amount: receipt.subtotal, currency: receipt.currency)
+                            SummaryRow(title: "Tax", amount: receipt.tax, currency: receipt.currency)
 
                             if receipt.tip > 0 {
-                                SummaryRow(title: "Tip", amount: receipt.tip)
+                                SummaryRow(title: "Tip", amount: receipt.tip, currency: receipt.currency)
                             }
 
                             Divider()
@@ -195,6 +195,7 @@ struct ReceiptReviewView: View {
                             SummaryRow(
                                 title: "Total",
                                 amount: receipt.total,
+                                currency: receipt.currency,
                                 isTotal: true
                             )
                         }
@@ -410,6 +411,17 @@ struct ReceiptReviewView: View {
 
 struct ReceiptItemRow: View {
     let item: ReceiptItem
+    let currency: String
+
+    private var currencySymbol: String {
+        switch currency {
+        case "SAR": return "SAR"
+        case "AED": return "AED"
+        case "EUR": return "€"
+        case "GBP": return "£"
+        default: return "$"
+        }
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -432,7 +444,7 @@ struct ReceiptItemRow: View {
 
                 HStack {
                     if item.quantity != 1 {
-                        Text("\(item.quantity, specifier: "%.0f") × $\(item.unitPrice, specifier: "%.2f")")
+                        Text("\(item.quantity, specifier: "%.0f") × \(currencySymbol) \(item.unitPrice, specifier: "%.2f")")
                             .font(.system(size: 14))
                             .foregroundColor(.secondary)
                     }
@@ -450,7 +462,7 @@ struct ReceiptItemRow: View {
 
             // Price
             VStack(alignment: .trailing, spacing: 2) {
-                Text("$\(item.totalPrice, specifier: "%.2f")")
+                Text("\(currencySymbol) \(item.totalPrice, specifier: "%.2f")")
                     .font(.system(size: 16, weight: .bold))
 
                 if item.isEdited {
@@ -468,11 +480,23 @@ struct ReceiptItemRow: View {
 struct SummaryRow: View {
     let title: String
     let amount: Double
+    let currency: String
     let isTotal: Bool
 
-    init(title: String, amount: Double, isTotal: Bool = false) {
+    private var currencySymbol: String {
+        switch currency {
+        case "SAR": return "SAR"
+        case "AED": return "AED"
+        case "EUR": return "€"
+        case "GBP": return "£"
+        default: return "$"
+        }
+    }
+
+    init(title: String, amount: Double, currency: String, isTotal: Bool = false) {
         self.title = title
         self.amount = amount
+        self.currency = currency
         self.isTotal = isTotal
     }
 
@@ -484,7 +508,7 @@ struct SummaryRow: View {
 
             Spacer()
 
-            Text("$\(amount, specifier: "%.2f")")
+            Text("\(currencySymbol) \(amount, specifier: "%.2f")")
                 .font(.system(size: isTotal ? 18 : 16, weight: isTotal ? .bold : .medium))
                 .foregroundColor(.primary)
         }
