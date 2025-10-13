@@ -9,7 +9,7 @@ import SwiftUI
 import CoreData
 
 struct LoginView: View {
-    @StateObject private var authManager = AuthenticationManager.shared
+    @ObservedObject private var authManager = AuthenticationManager.shared
     @Environment(\.managedObjectContext) private var viewContext
     @State private var email = ""
     @State private var phoneNumber = ""
@@ -30,6 +30,35 @@ struct LoginView: View {
     private func formatPhoneNumber(_ input: String) -> String {
         let cleanNumber = input.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
 
+        // International format (with country code)
+        if cleanNumber.count > 10 {
+            var result = "("
+            var index = cleanNumber.startIndex
+
+            // Add country code (first 2-3 digits)
+            let countryCodeLength = min(3, cleanNumber.count)
+            for i in 0..<countryCodeLength {
+                if index < cleanNumber.endIndex {
+                    result.append(cleanNumber[index])
+                    index = cleanNumber.index(after: index)
+                }
+                // Stop country code at 3 digits or if we've used all digits
+                if i == 2 || cleanNumber.distance(from: index, to: cleanNumber.endIndex) <= 0 {
+                    break
+                }
+            }
+            result.append(")")
+
+            // Add remaining digits
+            while index < cleanNumber.endIndex {
+                result.append(cleanNumber[index])
+                index = cleanNumber.index(after: index)
+            }
+
+            return result
+        }
+
+        // US format (10 digits)
         let mask = "(###) ###-####"
         var result = ""
         var index = cleanNumber.startIndex
@@ -48,7 +77,8 @@ struct LoginView: View {
 
     private func isValidPhoneNumber(_ phoneNumber: String) -> Bool {
         let cleanNumber = phoneNumber.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
-        return cleanNumber.count == 10
+        // Support US format (10 digits) or international format (11-15 digits with country code)
+        return cleanNumber.count == 10 || (cleanNumber.count >= 11 && cleanNumber.count <= 15)
     }
 
     private func validateAndLogin() {
@@ -91,7 +121,8 @@ struct LoginView: View {
 
             // Login successful
             let loginEmail = user.email ?? (isUsingPhone ? phoneNumber : email)
-            authManager.login(email: loginEmail)
+            let userName = user.fullName ?? "User"
+            authManager.login(email: loginEmail, name: userName)
             print("Login successful for user: \(user.fullName ?? "Unknown"), Email: \(user.email ?? "N/A")")
         }
     }
