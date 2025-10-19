@@ -12,6 +12,7 @@ import Combine
 struct ScanReceiptView: View {
     @StateObject private var demoData = DemoReceiptData.shared
     @StateObject private var cameraManager = CameraManager()
+    @StateObject private var navigationCoordinator = NavigationCoordinator.shared
     @State private var isAnimating = false
     @State private var showingCamera = false
     @State private var showingManualEntry = false
@@ -215,6 +216,17 @@ struct ScanReceiptView: View {
                     loadRecentReceipts()
                 }
             }
+            .onChange(of: navigationCoordinator.shouldTriggerScan) { shouldTrigger in
+                if shouldTrigger {
+                    // Auto-trigger scan from home screen
+                    if cameraPermissionStatus == .authorized {
+                        showingCamera = true
+                    } else {
+                        requestCameraPermission()
+                    }
+                    navigationCoordinator.resetScanTrigger()
+                }
+            }
         }
         .fullScreenCover(isPresented: $showingCamera) {
             CameraCaptureView(cameraManager: cameraManager, isPresented: $showingCamera, capturedReceipt: $capturedReceipt)
@@ -331,6 +343,7 @@ struct RecentScanCard: View {
                         Text("\(receipt.items.count) items")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
                     }
                     .lineLimit(1)
 
@@ -338,6 +351,8 @@ struct RecentScanCard: View {
                         Text(receipt.formattedDate)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.secondary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
 
                         Text("•")
                             .font(.system(size: 12))
@@ -347,10 +362,13 @@ struct RecentScanCard: View {
                             Image(systemName: receipt.scanType.icon)
                                 .font(.system(size: 11))
                             Text(receipt.scanType.description)
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.system(size: 12, weight: .medium))
+                                .lineLimit(1)
                         }
                         .foregroundColor(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
                     }
+                    .lineLimit(1)
                 }
 
                 Spacer()
@@ -360,11 +378,14 @@ struct RecentScanCard: View {
                     Text(receipt.formattedTotal)
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.primary)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
                 }
+                .fixedSize(horizontal: true, vertical: false)
             }
             .padding(16)
             .background(
