@@ -124,6 +124,7 @@ struct ReceiptReviewView: View {
                                 Text(receipt.formattedTotal)
                                     .font(.system(size: 28, weight: .bold))
                                     .foregroundColor(.primary)
+                                    .environment(\.layoutDirection, .leftToRight)
 
                                 Text("\(receipt.items.count) items")
                                     .font(.system(size: 14))
@@ -446,16 +447,6 @@ struct ReceiptItemRow: View {
     let item: ReceiptItem
     let currency: String
 
-    private var currencySymbol: String {
-        switch currency {
-        case "SAR": return "SAR"
-        case "AED": return "AED"
-        case "EUR": return "€"
-        case "GBP": return "£"
-        default: return "$"
-        }
-    }
-
     var body: some View {
         HStack(spacing: 12) {
             // Category Icon
@@ -477,7 +468,7 @@ struct ReceiptItemRow: View {
 
                 HStack {
                     if item.quantity != 1 {
-                        Text("\(item.quantity, specifier: "%.0f") × \(currencySymbol) \(item.unitPrice, specifier: "%.2f")")
+                        Text("\(item.quantity, specifier: "%.0f") × \(currency == "﷼" ? "\u{202D}" : "")\(currency)\(currency == "﷼" ? "\u{00A0}" : " ")\(item.unitPrice, specifier: "%.2f")\(currency == "﷼" ? "\u{202C}" : "")")
                             .font(.system(size: 14))
                             .foregroundColor(.secondary)
                     }
@@ -495,8 +486,9 @@ struct ReceiptItemRow: View {
 
             // Price
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(currencySymbol) \(item.totalPrice, specifier: "%.2f")")
+                Text("\(currency == "﷼" ? "\u{202D}" : "")\(currency)\(currency == "﷼" ? "\u{00A0}" : " ")\(item.totalPrice, specifier: "%.2f")\(currency == "﷼" ? "\u{202C}" : "")")
                     .font(.system(size: 16, weight: .bold))
+                    .environment(\.layoutDirection, .leftToRight)
 
                 if item.isEdited {
                     Text("edited")
@@ -516,16 +508,6 @@ struct SummaryRow: View {
     let currency: String
     let isTotal: Bool
 
-    private var currencySymbol: String {
-        switch currency {
-        case "SAR": return "SAR"
-        case "AED": return "AED"
-        case "EUR": return "€"
-        case "GBP": return "£"
-        default: return "$"
-        }
-    }
-
     init(title: String, amount: Double, currency: String, isTotal: Bool = false) {
         self.title = title
         self.amount = amount
@@ -541,9 +523,10 @@ struct SummaryRow: View {
 
             Spacer()
 
-            Text("\(currencySymbol) \(amount, specifier: "%.2f")")
+            Text("\(currency == "﷼" ? "\u{202D}" : "")\(currency)\(currency == "﷼" ? "\u{00A0}" : " ")\(amount, specifier: "%.2f")\(currency == "﷼" ? "\u{202C}" : "")")
                 .font(.system(size: isTotal ? 18 : 16, weight: isTotal ? .bold : .medium))
                 .foregroundColor(.primary)
+                .environment(\.layoutDirection, .leftToRight)
         }
     }
 }

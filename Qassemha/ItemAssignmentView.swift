@@ -67,6 +67,7 @@ struct ItemAssignmentView: View {
         .sheet(item: $selectedItem) { item in
             ItemSplitOptionsView(
                 item: item,
+                receipt: receipt,
                 configuration: $configuration
             )
         }

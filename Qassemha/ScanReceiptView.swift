@@ -380,6 +380,7 @@ struct RecentScanCard: View {
                         .foregroundColor(.primary)
                         .lineLimit(1)
                         .fixedSize(horizontal: true, vertical: false)
+                        .environment(\.layoutDirection, .leftToRight)
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .medium))

@@ -2896,26 +2896,44 @@ class DemoReceiptData: ObservableObject {
 
 extension Receipt {
     var formattedTotal: String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currency
-
-        if let formatted = formatter.string(from: NSNumber(value: total)) {
-            return formatted
-        }
-
-        // Fallback formatting based on currency
+        // Handle all special currencies with manual formatting to ensure correct symbol placement
         switch currency {
+        case "﷼":
+            // Saudi Riyal symbol - MUST appear before the amount
+            // Build string with explicit character ordering to avoid RTL issues
+            let formattedAmount = String(format: "%.2f", total)
+
+            // Build string with explicit character ordering
+            var result = ""
+            result.append("\u{202D}")  // Left-to-Right Override - strongest LTR forcing
+            result.append("﷼")
+            result.append("\u{00A0}")  // Non-breaking space
+            result.append(contentsOf: formattedAmount)
+            result.append("\u{202C}")  // Pop Directional Formatting
+
+            return result
         case "SAR":
             return "SAR \(String(format: "%.2f", total))"
         case "AED":
             return "AED \(String(format: "%.2f", total))"
-        case "EUR":
+        case "EUR", "€":
             return "€\(String(format: "%.2f", total))"
-        case "GBP":
+        case "GBP", "£":
             return "£\(String(format: "%.2f", total))"
-        default:
+        case "USD", "$":
             return "$\(String(format: "%.2f", total))"
+        default:
+            // Try NumberFormatter for other currencies
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .currency
+            formatter.currencyCode = currency
+
+            if let formatted = formatter.string(from: NSNumber(value: total)) {
+                return formatted
+            }
+
+            // Final fallback - currency symbol before amount
+            return "\(currency) \(String(format: "%.2f", total))"
         }
     }
 

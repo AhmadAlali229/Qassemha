@@ -24,30 +24,8 @@ struct SplitSummaryView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Receipt Overview
-                    receiptOverviewSection
-
-                    // Split Method Info
-                    splitMethodSection
-
-                    // Payment Overview
-                    paymentOverviewSection
-
-                    // Participants Summary
-                    participantsSummarySection
-
-                    // Detailed Breakdown
-                    detailedBreakdownSection
-
-                    // Validation Warnings
-                    validationSection
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 20)
-            }
-            .background(
+            ZStack {
+                // Background
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color.green.opacity(0.05),
@@ -57,7 +35,28 @@ struct SplitSummaryView: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
-            )
+                .ignoresSafeArea()
+
+                // Main Content
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // All content sections
+                        Group {
+                            receiptOverviewCard
+                            splitMethodCard
+                            paymentOverviewCard
+                            whoOwesWhatCard
+                            detailedBreakdownCard
+
+                            if !manager.validateSplit(receipt: receipt, config: configuration).isEmpty {
+                                validationWarningsCard
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
+                }
+            }
             .navigationTitle("Split Summary")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -118,10 +117,11 @@ struct SplitSummaryView: View {
         }
     }
 
-    // MARK: - Receipt Overview Section
+    // MARK: - Receipt Overview Card
 
-    private var receiptOverviewSection: some View {
+    private var receiptOverviewCard: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Header
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
@@ -148,48 +148,51 @@ struct SplitSummaryView: View {
 
             Divider()
 
-            HStack {
+            // Amount Details
+            HStack(spacing: 0) {
+                // Subtotal
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Subtotal")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("$\(receipt.subtotal, specifier: "%.2f")")
+                    Text("\(receipt.currency)\(receipt.subtotal, specifier: "%.2f")")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer()
-
+                // Tax
                 VStack(alignment: .center, spacing: 4) {
                     Text("Tax")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("$\(receipt.tax, specifier: "%.2f")")
+                    Text("\(receipt.currency)\(receipt.tax, specifier: "%.2f")")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
 
-                Spacer()
-
+                // Tip
                 VStack(alignment: .center, spacing: 4) {
                     Text("Tip")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("$\(receipt.tip, specifier: "%.2f")")
+                    Text("\(receipt.currency)\(receipt.tip, specifier: "%.2f")")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
 
-                Spacer()
-
+                // Total
                 VStack(alignment: .trailing, spacing: 4) {
                     Text("Total")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("$\(receipt.total, specifier: "%.2f")")
+                    Text("\(receipt.currency)\(receipt.total, specifier: "%.2f")")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.primary)
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .padding(20)
@@ -200,88 +203,9 @@ struct SplitSummaryView: View {
         )
     }
 
-    // MARK: - Payment Overview Section
+    // MARK: - Split Method Card
 
-    private var paymentOverviewSection: some View {
-        let paidCount = summaries.filter { $0.isPaid }.count
-        let totalCount = summaries.count
-        let paidAmount = summaries.filter { $0.isPaid }.reduce(0.0) { $0 + $1.total }
-        let totalAmount = receipt.total
-
-        return HStack(spacing: 16) {
-            // Paid Summary
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.green)
-
-                    Text("Paid")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.secondary)
-                }
-                .fixedSize()
-
-                Text("\(paidCount)/\(totalCount) people")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.primary)
-                    .fixedSize()
-
-                Text("$\(paidAmount, specifier: "%.2f") / $\(totalAmount, specifier: "%.2f")")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.green.opacity(0.1))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.green.opacity(0.3), lineWidth: 1.5)
-                    )
-            )
-
-            // Pending Summary
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 8) {
-                    Image(systemName: "clock.fill")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.orange)
-
-                    Text("Pending")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.secondary)
-                }
-                .fixedSize()
-
-                Text("\(totalCount - paidCount) people")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.primary)
-                    .fixedSize()
-
-                Text("$\(totalAmount - paidAmount, specifier: "%.2f")")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.secondary)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.orange.opacity(0.1))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.orange.opacity(0.3), lineWidth: 1.5)
-                    )
-            )
-        }
-    }
-
-    // MARK: - Split Method Section
-
-    private var splitMethodSection: some View {
+    private var splitMethodCard: some View {
         HStack(spacing: 12) {
             ZStack {
                 Circle()
@@ -326,10 +250,88 @@ struct SplitSummaryView: View {
         )
     }
 
-    // MARK: - Participants Summary Section
+    // MARK: - Payment Overview Card
 
-    private var participantsSummarySection: some View {
+    private var paymentOverviewCard: some View {
+        let paidCount = summaries.filter { $0.isPaid }.count
+        let totalCount = summaries.count
+        let paidAmount = summaries.filter { $0.isPaid }.reduce(0.0) { $0 + $1.total }
+        let totalAmount = receipt.total
+
+        return HStack(spacing: 12) {
+            // Paid Status
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.green)
+
+                    Text("Paid")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+
+                Text("\(paidCount)/\(totalCount) people")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.primary)
+
+                Text("\(receipt.currency)\(paidAmount, specifier: "%.2f")")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.green.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.green.opacity(0.3), lineWidth: 1.5)
+                    )
+            )
+
+            // Pending Status
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.fill")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.orange)
+
+                    Text("Pending")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.secondary)
+                }
+
+                Text("\(totalCount - paidCount) people")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.primary)
+
+                Text("\(receipt.currency)\(totalAmount - paidAmount, specifier: "%.2f")")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.orange.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.orange.opacity(0.3), lineWidth: 1.5)
+                    )
+            )
+        }
+    }
+
+    // MARK: - Who Owes What Card
+
+    private var whoOwesWhatCard: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Header
             HStack {
                 Text("Who Owes What")
                     .font(.system(size: 20, weight: .bold))
@@ -342,10 +344,12 @@ struct SplitSummaryView: View {
                     .foregroundColor(.green)
             }
 
+            // Participant Cards
             VStack(spacing: 12) {
                 ForEach(summaries) { summary in
-                    ParticipantSummaryCard(
+                    ParticipantCard(
                         summary: summary,
+                        currency: receipt.currency,
                         onTap: {
                             selectedSummary = summary
                         },
@@ -364,9 +368,9 @@ struct SplitSummaryView: View {
         )
     }
 
-    // MARK: - Detailed Breakdown Section
+    // MARK: - Detailed Breakdown Card
 
-    private var detailedBreakdownSection: some View {
+    private var detailedBreakdownCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Detailed Breakdown")
                 .font(.system(size: 18, weight: .semibold))
@@ -375,6 +379,7 @@ struct SplitSummaryView: View {
             VStack(spacing: 12) {
                 ForEach(summaries) { summary in
                     VStack(alignment: .leading, spacing: 8) {
+                        // Participant Header
                         HStack {
                             Circle()
                                 .fill(Color(hex: summary.participant.avatarColor) ?? .blue)
@@ -392,21 +397,64 @@ struct SplitSummaryView: View {
                             Spacer()
                         }
 
+                        // Breakdown Details
                         VStack(spacing: 6) {
-                            BreakdownRow(label: "Items (\(summary.itemsCount))", amount: summary.subtotal, color: .primary)
-                            if configuration.includeTax && summary.tax > 0 {
-                                BreakdownRow(label: "Tax", amount: summary.tax, color: .secondary)
+                            HStack {
+                                Text("Items (\(summary.itemsCount))")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.primary)
+
+                                Spacer()
+
+                                Text("\(receipt.currency)\(summary.subtotal, specifier: "%.2f")")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.primary)
                             }
+
+                            if configuration.includeTax && summary.tax > 0 {
+                                HStack {
+                                    Text("Tax")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.secondary)
+
+                                    Spacer()
+
+                                    Text("\(receipt.currency)\(summary.tax, specifier: "%.2f")")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+
                             if configuration.includeTip && summary.tip > 0 {
-                                BreakdownRow(label: "Tip", amount: summary.tip, color: .secondary)
+                                HStack {
+                                    Text("Tip")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.secondary)
+
+                                    Spacer()
+
+                                    Text("\(receipt.currency)\(summary.tip, specifier: "%.2f")")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.secondary)
+                                }
                             }
 
                             Divider()
                                 .padding(.vertical, 4)
 
-                            BreakdownRow(label: "Total", amount: summary.total, color: .blue, isBold: true)
+                            HStack {
+                                Text("Total")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.blue)
+
+                                Spacer()
+
+                                Text("\(receipt.currency)\(summary.total, specifier: "%.2f")")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.blue)
+                            }
                         }
-                        .padding(.leading, 44)
+                        .padding(.leading, 40)
                     }
                     .padding(16)
                     .background(
@@ -414,7 +462,11 @@ struct SplitSummaryView: View {
                             .fill(.ultraThinMaterial)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color(hex: summary.participant.avatarColor)?.opacity(0.3) ?? Color.blue.opacity(0.3), lineWidth: 1.5)
+                                    .stroke(
+                                        Color(hex: summary.participant.avatarColor)?.opacity(0.3) ??
+                                        Color.blue.opacity(0.3),
+                                        lineWidth: 1.5
+                                    )
                             )
                     )
                 }
@@ -428,48 +480,46 @@ struct SplitSummaryView: View {
         )
     }
 
-    // MARK: - Validation Section
+    // MARK: - Validation Warnings Card
 
-    private var validationSection: some View {
-        Group {
-            let warnings = manager.validateSplit(receipt: receipt, config: configuration)
-            if !warnings.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 18, weight: .medium))
+    private var validationWarningsCard: some View {
+        let warnings = manager.validateSplit(receipt: receipt, config: configuration)
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.orange)
+
+                Text("Attention Required")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.primary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(warnings, id: \.self) { warning in
+                    HStack(alignment: .top, spacing: 8) {
+                        Text("•")
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundColor(.orange)
 
-                        Text("Attention Required")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.primary)
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(warnings, id: \.self) { warning in
-                            HStack(alignment: .top, spacing: 8) {
-                                Text("•")
-                                    .font(.system(size: 14, weight: .bold))
-                                    .foregroundColor(.orange)
-
-                                Text(warning)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
+                        Text(warning)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
-                .padding(16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.orange.opacity(0.1))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.orange.opacity(0.3), lineWidth: 1.5)
-                        )
-                )
             }
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.orange.opacity(0.1))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.orange.opacity(0.3), lineWidth: 1.5)
+                )
+        )
     }
 
     // MARK: - Helper Methods
@@ -491,101 +541,104 @@ struct SplitSummaryView: View {
     }
 }
 
-// MARK: - Participant Summary Card
+// MARK: - Participant Card Component
 
-struct ParticipantSummaryCard: View {
+struct ParticipantCard: View {
     let summary: SplitSummary
+    let currency: String
     let onTap: () -> Void
     let onTogglePaid: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
-            // Main Card Content
+            // Main Content (Tappable)
             Button(action: onTap) {
-                HStack(spacing: 16) {
+                HStack(spacing: 14) {
                     // Avatar
                     Circle()
                         .fill(Color(hex: summary.participant.avatarColor) ?? .blue)
-                        .frame(width: 50, height: 50)
+                        .frame(width: 48, height: 48)
                         .overlay(
                             Text(summary.participant.name.prefix(1).uppercased())
-                                .font(.system(size: 20, weight: .bold))
+                                .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(.white)
                         )
 
-                    // Info
+                    // Name and Items
                     VStack(alignment: .leading, spacing: 4) {
                         Text(summary.participant.name)
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.system(size: 17, weight: .semibold))
                             .foregroundColor(.primary)
                             .lineLimit(1)
-                            .truncationMode(.tail)
+                            .minimumScaleFactor(0.8)
                             .frame(maxWidth: .infinity, alignment: .leading)
 
                         HStack(spacing: 8) {
                             Text("\(summary.itemsCount) item\(summary.itemsCount == 1 ? "" : "s")")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.primary.opacity(0.7))
                                 .fixedSize()
 
-                            // Payment Status Badge
-                            Text(summary.isPaid ? "Paid" : "Pending")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(summary.isPaid ? .green : .orange)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .fill(summary.isPaid ? Color.green.opacity(0.1) : Color.orange.opacity(0.1))
-                                )
-                                .frame(minWidth: 78)
+                            // Status Badge
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(summary.isPaid ? Color.green : Color.orange)
+                                    .frame(width: 6, height: 6)
+                                Text(summary.isPaid ? "Paid" : "Pending")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(summary.isPaid ? .green : .orange)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(summary.isPaid ? Color.green.opacity(0.1) : Color.orange.opacity(0.1))
+                            )
+                            .fixedSize()
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                     Spacer(minLength: 8)
 
-                    // Amount and Arrow
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("$\(summary.total, specifier: "%.2f")")
-                            .font(.system(size: 24, weight: .bold))
+                    // Amount
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text("\(currency)\(summary.total, specifier: "%.2f")")
+                            .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.primary)
+                            .lineLimit(1)
                             .fixedSize()
 
                         Text("owes")
-                            .font(.system(size: 13, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.secondary)
+                            .fixedSize()
                     }
                     .fixedSize()
 
+                    // Chevron
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.secondary)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.secondary.opacity(0.5))
                 }
-                .frame(minHeight: 82)
                 .padding(16)
             }
             .buttonStyle(PlainButtonStyle())
 
-            // Payment Action Button
+            Divider()
+
+            // Payment Toggle Button
             Button(action: onTogglePaid) {
                 HStack {
-                    Spacer()
+                    Image(systemName: summary.isPaid ? "xmark.circle.fill" : "checkmark.circle.fill")
+                        .font(.system(size: 14, weight: .medium))
 
-                    HStack(spacing: 6) {
-                        Image(systemName: summary.isPaid ? "xmark.circle.fill" : "checkmark.circle.fill")
-                            .font(.system(size: 14, weight: .medium))
-                            .frame(width: 14)
-
-                        Text(summary.isPaid ? "Mark as Unpaid" : "Mark as Paid")
-                            .font(.system(size: 14, weight: .semibold))
-                            .frame(minWidth: 110)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.vertical, 10)
-
-                    Spacer()
+                    Text(summary.isPaid ? "Mark as Unpaid" : "Mark as Paid")
+                        .font(.system(size: 14, weight: .semibold))
                 }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
                 .background(summary.isPaid ? Color.orange : Color.green)
             }
         }
@@ -595,37 +648,12 @@ struct ParticipantSummaryCard: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(
-                            summary.isPaid ?
-                                Color.green.opacity(0.5) :
-                                (Color(hex: summary.participant.avatarColor)?.opacity(0.3) ?? Color.blue.opacity(0.3)),
-                            lineWidth: 2
+                            summary.isPaid ? Color.green.opacity(0.5) : Color.gray.opacity(0.3),
+                            lineWidth: 1.5
                         )
                 )
         )
         .clipShape(RoundedRectangle(cornerRadius: 12))
-    }
-}
-
-// MARK: - Breakdown Row
-
-struct BreakdownRow: View {
-    let label: String
-    let amount: Double
-    let color: Color
-    var isBold: Bool = false
-
-    var body: some View {
-        HStack {
-            Text(label)
-                .font(.system(size: isBold ? 16 : 14, weight: isBold ? .bold : .medium))
-                .foregroundColor(color)
-
-            Spacer()
-
-            Text("$\(amount, specifier: "%.2f")")
-                .font(.system(size: isBold ? 16 : 14, weight: isBold ? .bold : .semibold))
-                .foregroundColor(color)
-        }
     }
 }
 
@@ -638,101 +666,8 @@ struct ParticipantDetailView: View {
 
     var body: some View {
         NavigationView {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Participant Header
-                    VStack(spacing: 16) {
-                        Circle()
-                            .fill(Color(hex: summary.participant.avatarColor) ?? .blue)
-                            .frame(width: 80, height: 80)
-                            .overlay(
-                                Text(summary.participant.name.prefix(1).uppercased())
-                                    .font(.system(size: 32, weight: .bold))
-                                    .foregroundColor(.white)
-                            )
-
-                        VStack(spacing: 4) {
-                            Text(summary.participant.name)
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.primary)
-
-                            if let phone = summary.participant.phoneNumber {
-                                Text(phone)
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-
-                        Text("$\(summary.total, specifier: "%.2f")")
-                            .font(.system(size: 36, weight: .bold))
-                            .foregroundColor(.blue)
-                    }
-                    .padding(.top, 20)
-
-                    // Items List
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Items (\(summary.items.count))")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.primary)
-
-                        VStack(spacing: 8) {
-                            ForEach(summary.items) { item in
-                                HStack {
-                                    Text(item.name)
-                                        .font(.system(size: 15, weight: .medium))
-                                        .foregroundColor(.primary)
-
-                                    Spacer()
-
-                                    Text("$\(item.totalPrice, specifier: "%.2f")")
-                                        .font(.system(size: 15, weight: .semibold))
-                                        .foregroundColor(.secondary)
-                                }
-                                .padding(12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(.ultraThinMaterial)
-                                )
-                            }
-                        }
-                    }
-                    .padding(20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(.regularMaterial)
-                            .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
-                    )
-
-                    // Total Breakdown
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Breakdown")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.primary)
-
-                        VStack(spacing: 8) {
-                            BreakdownRow(label: "Subtotal", amount: summary.subtotal, color: .primary)
-                            BreakdownRow(label: "Tax", amount: summary.tax, color: .secondary)
-                            BreakdownRow(label: "Tip", amount: summary.tip, color: .secondary)
-
-                            Divider()
-                                .padding(.vertical, 4)
-
-                            BreakdownRow(label: "Total", amount: summary.total, color: .blue, isBold: true)
-                        }
-                    }
-                    .padding(20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(.regularMaterial)
-                            .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
-                    )
-
-                    Spacer(minLength: 100)
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 20)
-            }
-            .background(
+            ZStack {
+                // Background
                 LinearGradient(
                     gradient: Gradient(colors: [
                         Color(hex: summary.participant.avatarColor)?.opacity(0.1) ?? Color.blue.opacity(0.1),
@@ -741,7 +676,138 @@ struct ParticipantDetailView: View {
                     startPoint: .top,
                     endPoint: .bottom
                 )
-            )
+                .ignoresSafeArea()
+
+                // Content
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header Section
+                        VStack(spacing: 16) {
+                            Circle()
+                                .fill(Color(hex: summary.participant.avatarColor) ?? .blue)
+                                .frame(width: 80, height: 80)
+                                .overlay(
+                                    Text(summary.participant.name.prefix(1).uppercased())
+                                        .font(.system(size: 32, weight: .bold))
+                                        .foregroundColor(.white)
+                                )
+
+                            VStack(spacing: 4) {
+                                Text(summary.participant.name)
+                                    .font(.system(size: 24, weight: .bold))
+                                    .foregroundColor(.primary)
+
+                                if let phone = summary.participant.phoneNumber {
+                                    Text(phone)
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+
+                            Text("\(receipt.currency)\(summary.total, specifier: "%.2f")")
+                                .font(.system(size: 36, weight: .bold))
+                                .foregroundColor(.blue)
+                        }
+                        .padding(.top, 20)
+
+                        // Items Section
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Items (\(summary.items.count))")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.primary)
+
+                            VStack(spacing: 8) {
+                                ForEach(summary.items) { item in
+                                    HStack {
+                                        Text(item.name)
+                                            .font(.system(size: 15, weight: .medium))
+                                            .foregroundColor(.primary)
+
+                                        Spacer()
+
+                                        Text("\(receipt.currency)\(item.totalPrice, specifier: "%.2f")")
+                                            .font(.system(size: 15, weight: .semibold))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .padding(12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(.ultraThinMaterial)
+                                    )
+                                }
+                            }
+                        }
+                        .padding(20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(.regularMaterial)
+                                .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                        )
+
+                        // Breakdown Section
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Breakdown")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.primary)
+
+                            VStack(spacing: 8) {
+                                HStack {
+                                    Text("Subtotal")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Text("\(receipt.currency)\(summary.subtotal, specifier: "%.2f")")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.primary)
+                                }
+
+                                HStack {
+                                    Text("Tax")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(receipt.currency)\(summary.tax, specifier: "%.2f")")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.secondary)
+                                }
+
+                                HStack {
+                                    Text("Tip")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(receipt.currency)\(summary.tip, specifier: "%.2f")")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Divider()
+                                    .padding(.vertical, 4)
+
+                                HStack {
+                                    Text("Total")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.blue)
+                                    Spacer()
+                                    Text("\(receipt.currency)\(summary.total, specifier: "%.2f")")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                        }
+                        .padding(20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(.regularMaterial)
+                                .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                        )
+
+                        Spacer(minLength: 40)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 20)
+                }
+            }
             .navigationTitle("Details")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -769,7 +835,7 @@ struct ParticipantDetailView: View {
             tax: 2.60,
             tip: 5.00,
             total: 33.58,
-            currency: "USD",
+            currency: "$",
             scanType: .manual,
             category: .food
         ),

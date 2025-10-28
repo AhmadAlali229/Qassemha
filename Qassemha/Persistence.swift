@@ -51,6 +51,12 @@ struct PersistenceController {
                  */
                 fatalError("Unresolved error \(error), \(error.userInfo)")
             }
+
+            // Print database location for direct access
+            if let url = storeDescription.url {
+                print("📍 CoreData Database Location: \(url.path)")
+                print("   Open in Terminal: sqlite3 '\(url.path)'")
+            }
         })
         container.viewContext.automaticallyMergesChangesFromParent = true
     }

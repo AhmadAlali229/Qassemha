@@ -336,6 +336,7 @@ struct ReceiptListCard: View {
                         Text(receipt.formattedTotal)
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.primary)
+                            .environment(\.layoutDirection, .leftToRight)
                     }
 
                     HStack {
