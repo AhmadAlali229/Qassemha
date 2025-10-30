@@ -57,6 +57,11 @@ struct PersistenceController {
                 print("📍 CoreData Database Location: \(url.path)")
                 print("   Open in Terminal: sqlite3 '\(url.path)'")
             }
+
+            // Seed hardcoded QR receipts on first launch
+            DispatchQueue.main.async {
+                ReceiptDataService.shared.seedHardcodedQRReceipts()
+            }
         })
         container.viewContext.automaticallyMergesChangesFromParent = true
     }
