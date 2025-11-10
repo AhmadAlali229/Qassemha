@@ -387,6 +387,82 @@ struct CameraCaptureView: View {
         }
     }
 
+    private func parseDateFromString(_ dateString: String) -> Date? {
+        // Common date formats found in receipts
+        let dateFormats = [
+            // ISO 8601 formats
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd HH:mm:ssZ",
+            "yyyy-MM-dd'T'HH:mm:ss",
+
+            // Common receipt formats
+            "dd/MM/yyyy HH:mm:ss",
+            "dd/MM/yyyy HH:mm",
+            "dd-MM-yyyy HH:mm:ss",
+            "dd-MM-yyyy HH:mm",
+            "MM/dd/yyyy HH:mm:ss",
+            "MM/dd/yyyy HH:mm",
+            "MM-dd-yyyy HH:mm:ss",
+            "MM-dd-yyyy HH:mm",
+
+            // Date only formats
+            "yyyy-MM-dd",
+            "dd/MM/yyyy",
+            "dd-MM-yyyy",
+            "MM/dd/yyyy",
+            "MM-dd-yyyy"
+        ]
+
+        for format in dateFormats {
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone.current  // Use device's local timezone
+
+            if let date = formatter.date(from: dateString) {
+                print("✅ Parsed date '\(dateString)' with format '\(format)': \(date)")
+                return date
+            }
+        }
+
+        print("⚠️ Could not parse date string: '\(dateString)'")
+        return nil
+    }
+
+    private func extractDateFromText(_ text: String) -> Date? {
+        // Regex patterns to find dates in text
+        let regexPatterns = [
+            // ISO 8601: 2025-10-05T15:39:21Z or 2025-10-05 15:39:21
+            "\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}[Z]?",
+            // Date with slashes: 05/10/2025 15:39:21 or 10/05/2025 15:39
+            "\\d{2}/\\d{2}/\\d{4}[\\s]+\\d{2}:\\d{2}(?::\\d{2})?",
+            // Date with dashes: 05-10-2025 15:39:21
+            "\\d{2}-\\d{2}-\\d{4}[\\s]+\\d{2}:\\d{2}(?::\\d{2})?",
+            // Date only: 2025-10-05, 05/10/2025, 05-10-2025
+            "\\d{4}-\\d{2}-\\d{2}",
+            "\\d{2}/\\d{2}/\\d{4}",
+            "\\d{2}-\\d{2}-\\d{4}"
+        ]
+
+        let lines = text.components(separatedBy: .newlines)
+        for line in lines {
+            for pattern in regexPatterns {
+                if let regex = try? NSRegularExpression(pattern: pattern),
+                   let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+                   let range = Range(match.range, in: line) {
+                    let dateString = String(line[range])
+                    if let date = parseDateFromString(dateString) {
+                        return date
+                    }
+                }
+            }
+        }
+
+        return nil
+    }
+
     private func parseReceiptFromQRCode(_ qrString: String) -> Receipt? {
         // First, check if the QR code exists in the database
         if let receipt = ReceiptDataService.shared.fetchReceipt(forQRCode: qrString) {
@@ -443,10 +519,21 @@ struct CameraCaptureView: View {
                         )
                     } ?? []
 
+                    // Parse date from JSON
+                    var receiptDate = Date()
+                    if let dateString = json["date"] as? String {
+                        receiptDate = parseDateFromString(dateString) ?? Date()
+                    } else if let dateString = json["receipt_date"] as? String {
+                        receiptDate = parseDateFromString(dateString) ?? Date()
+                    } else if let dateString = json["timestamp"] as? String {
+                        receiptDate = parseDateFromString(dateString) ?? Date()
+                    }
+
                     let receipt = Receipt(
                         storeName: storeName,
                         storeAddress: json["address"] as? String ?? json["storeAddress"] as? String,
-                        date: Date(), // Could parse from JSON if available
+                        date: receiptDate,
+                        createdAt: Date(),
                         items: items,
                         subtotal: json["subtotal"] as? Double ?? total,
                         tax: json["tax"] as? Double ?? 0,
@@ -456,7 +543,8 @@ struct CameraCaptureView: View {
                         receiptNumber: json["receipt_number"] as? String ?? json["receiptNumber"] as? String,
                         imageData: nil,
                         scanType: .qrCode,
-                        category: .other
+                        category: .other,
+                        receiptType: .sent
                     )
 
                     print("✅ Successfully parsed receipt from QR code!")
@@ -485,10 +573,14 @@ struct CameraCaptureView: View {
             isPresented = false
         } else {
             // If parsing fails, create a basic receipt structure
+            // Try to extract date from text even if full parsing failed
+            let extractedDate = extractDateFromText(text) ?? Date()
+
             let receipt = Receipt(
                 storeName: "Unknown Store",
                 storeAddress: nil,
-                date: Date(),
+                date: extractedDate,
+                createdAt: Date(),
                 items: [],
                 subtotal: 0,
                 tax: 0,
@@ -498,7 +590,8 @@ struct CameraCaptureView: View {
                 receiptNumber: nil,
                 imageData: imageData,
                 scanType: .camera,
-                category: .other
+                category: .other,
+                receiptType: .sent
             )
 
             cameraManager.clearQRCodes()

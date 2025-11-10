@@ -177,6 +177,14 @@ struct LoginView: View {
                                     Text("Sign in to continue")
                                         .font(.system(size: 14))
                                         .foregroundColor(.secondary)
+
+                                    if #available(iOS 18.0, *) {
+                                        LiquidGlassAttributionView()
+                                            .padding(.top, 12)
+                                    } else {
+                                        FallbackAttributionView()
+                                            .padding(.top, 12)
+                                    }
                                 }
                             }
                             Spacer()
