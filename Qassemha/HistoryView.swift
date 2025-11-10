@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct HistoryView: View {
+    @ObservedObject private var currencyManager = CurrencyManager.shared
     @State private var selectedFilter = "All"
     @State private var searchText = ""
     @State private var showingFilters = false
@@ -174,6 +175,7 @@ struct HistoryTransaction: Identifiable {
 
 struct HistoryTransactionCard: View {
     let transaction: HistoryTransaction
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
@@ -243,7 +245,7 @@ struct HistoryTransactionCard: View {
                             Spacer()
 
                             VStack(alignment: .trailing, spacing: 2) {
-                                Text("$\(transaction.yourShare, specifier: "%.2f")")
+                                Text(currencyManager.format(amount: transaction.yourShare))
                                     .font(.system(size: 16, weight: .bold))
                                     .foregroundColor(.primary)
 

@@ -10,11 +10,12 @@ import Combine
 
 struct AllReceiptsView: View {
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var authManager = AuthenticationManager.shared
+    @StateObject private var billSplitManager = BillSplitManager.shared
+    @ObservedObject private var currencyManager = CurrencyManager.shared
     @State private var receipts: [Receipt] = []
     @State private var filteredReceipts: [Receipt] = []
     @State private var searchText: String = ""
-    @State private var selectedCategory: Receipt.ReceiptCategory? = nil
-    @State private var showingReceiptDetail = false
     @State private var selectedReceipt: Receipt?
     @State private var sortOrder: SortOrder = .dateDescending
 
@@ -71,70 +72,51 @@ struct AllReceiptsView: View {
                             )
                     )
 
-                    // Filter and Sort Row
-                    HStack(spacing: 12) {
-                        // Category Filter
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                // All Categories Button
-                                FilterCategoryButton(
-                                    title: "All",
-                                    icon: "list.bullet",
-                                    color: .blue,
-                                    isSelected: selectedCategory == nil
-                                ) {
-                                    selectedCategory = nil
-                                }
-
-                                ForEach(Receipt.ReceiptCategory.allCases, id: \.self) { category in
-                                    FilterCategoryButton(
-                                        title: category.rawValue,
-                                        icon: category.icon,
-                                        color: category.color,
-                                        isSelected: selectedCategory == category
-                                    ) {
-                                        selectedCategory = selectedCategory == category ? nil : category
+                    // Sort Menu - Expanded
+                    Menu {
+                        ForEach(SortOrder.allCases, id: \.self) { order in
+                            Button(action: {
+                                sortOrder = order
+                                applyFiltersAndSort()
+                            }) {
+                                HStack {
+                                    Image(systemName: order.systemImage)
+                                    Text(order.rawValue)
+                                    if sortOrder == order {
+                                        Spacer()
+                                        Image(systemName: "checkmark")
                                     }
                                 }
                             }
-                            .padding(.horizontal, 20)
                         }
-                        .padding(.horizontal, -20)
-
-                        Spacer()
-
-                        // Sort Menu
-                        Menu {
-                            ForEach(SortOrder.allCases, id: \.self) { order in
-                                Button(action: {
-                                    sortOrder = order
-                                    applyFiltersAndSort()
-                                }) {
-                                    HStack {
-                                        Image(systemName: order.systemImage)
-                                        Text(order.rawValue)
-                                        if sortOrder == order {
-                                            Spacer()
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Image(systemName: sortOrder.systemImage)
-                                    .font(.system(size: 14, weight: .medium))
-                                Image(systemName: "chevron.down")
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Sort By")
                                     .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.secondary)
+
+                                Text(sortOrder.rawValue)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.primary)
                             }
-                            .foregroundColor(.blue)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(.blue, lineWidth: 1)
-                            )
+
+                            Spacer()
+
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.blue)
                         }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(.blue.opacity(0.3), lineWidth: 1)
+                                )
+                        )
                     }
                 }
                 .padding(.horizontal, 20)
@@ -147,7 +129,7 @@ struct AllReceiptsView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.secondary)
 
-                    if !searchText.isEmpty || selectedCategory != nil {
+                    if !searchText.isEmpty {
                         Text("filtered")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.blue)
@@ -157,7 +139,7 @@ struct AllReceiptsView: View {
 
                     if !filteredReceipts.isEmpty {
                         let totalAmount = filteredReceipts.reduce(0) { $0 + $1.total }
-                        Text("Total: $\(totalAmount, specifier: "%.2f")")
+                        Text("Total: \(currencyManager.format(amount: totalAmount))")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundColor(.primary)
                     }
@@ -170,14 +152,13 @@ struct AllReceiptsView: View {
                     LazyVStack(spacing: 12) {
                         if filteredReceipts.isEmpty {
                             EmptyStateView(
-                                hasFilters: !searchText.isEmpty || selectedCategory != nil,
+                                hasFilters: !searchText.isEmpty,
                                 searchText: searchText
                             )
                         } else {
                             ForEach(filteredReceipts) { receipt in
                                 ReceiptListCard(receipt: receipt) {
                                     selectedReceipt = receipt
-                                    showingReceiptDetail = true
                                 }
                             }
                         }
@@ -207,13 +188,14 @@ struct AllReceiptsView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingReceiptDetail) {
-            if let receipt = selectedReceipt {
-                ReceiptReviewView(
-                    receipt: .constant(receipt),
-                    isPresented: $showingReceiptDetail
+        .sheet(item: $selectedReceipt) { receipt in
+            ReceiptReviewView(
+                receipt: .constant(receipt),
+                isPresented: Binding(
+                    get: { selectedReceipt != nil },
+                    set: { if !$0 { selectedReceipt = nil } }
                 )
-            }
+            )
         }
         .onAppear {
             loadReceipts()
@@ -227,9 +209,6 @@ struct AllReceiptsView: View {
         .onChange(of: searchText) { _ in
             applyFiltersAndSort()
         }
-        .onChange(of: selectedCategory) { _ in
-            applyFiltersAndSort()
-        }
     }
 
     private func loadReceipts() {
@@ -240,6 +219,32 @@ struct AllReceiptsView: View {
     private func applyFiltersAndSort() {
         var filtered = receipts
 
+        // Filter by user - only show receipts created by current user (or examples)
+        let currentUserPhone = authManager.currentUserPhoneNumber
+        filtered = filtered.filter { receipt in
+            // Always show example receipts
+            let isExample = receipt.id.uuidString.hasPrefix("00000000-0000-0000-0000")
+            if isExample {
+                return true
+            }
+
+            // Check if receipt has a configuration
+            if let config = billSplitManager.getConfiguration(for: receipt.id) {
+                // If config has adminId, only show if current user is the admin
+                if let adminId = config.adminId {
+                    let isCurrentUserAdmin = config.participants.contains { participant in
+                        participant.id == adminId && participant.phoneNumber == currentUserPhone
+                    }
+                    return isCurrentUserAdmin
+                }
+                // If config exists but no adminId, show it (legacy receipts)
+                return true
+            }
+
+            // If no config exists, show it (newly added manual receipts)
+            return true
+        }
+
         // Apply search filter
         if !searchText.isEmpty {
             filtered = filtered.filter { receipt in
@@ -248,11 +253,6 @@ struct AllReceiptsView: View {
                     item.name.localizedCaseInsensitiveContains(searchText)
                 }
             }
-        }
-
-        // Apply category filter
-        if let category = selectedCategory {
-            filtered = filtered.filter { $0.category == category }
         }
 
         // Apply sorting
@@ -270,38 +270,6 @@ struct AllReceiptsView: View {
         }
 
         filteredReceipts = filtered
-    }
-}
-
-struct FilterCategoryButton: View {
-    let title: String
-    let icon: String
-    let color: Color
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .medium))
-
-                Text(title)
-                    .font(.system(size: 12, weight: .medium))
-            }
-            .foregroundColor(isSelected ? .white : color)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? color : color.opacity(0.1))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(color.opacity(isSelected ? 0 : 0.5), lineWidth: 1)
-                    )
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
     }
 }
 

@@ -10,17 +10,314 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject private var authManager = AuthenticationManager.shared
     @StateObject private var billSplitManager = BillSplitManager.shared
+    @StateObject private var walletManager = WalletManager.shared
     @StateObject private var navigationCoordinator = NavigationCoordinator.shared
-    @State private var walletBalance: Double = 248.50
-    @State private var pendingAmount: Double = 67.25
+    @ObservedObject private var currencyManager = CurrencyManager.shared
     @State private var isAnimating = false
     @State private var showingProfile = false
     @State private var showingAllSplits = false
+    @State private var showingAddFunds = false
     @State private var recentActivity: [(receipt: Receipt, config: SplitConfiguration)] = []
     @State private var selectedSplitReceipt: Receipt?
+    @State private var selectedReceiptTab: ReceiptTab = .received
+
+    enum ReceiptTab {
+        case received
+        case sent
+    }
+
+    // Example receipts for demonstration (not saved to database)
+    private var exampleReceivedReceipts: [(receipt: Receipt, config: SplitConfiguration)] {
+        // Example 1: Equal Split
+        let receipt1 = Receipt(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
+            storeName: "Pizza Palace",
+            storeAddress: "123 Main St",
+            date: Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date(),
+            createdAt: Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date(),
+            items: [
+                ReceiptItem(name: "Large Pepperoni Pizza", quantity: 1, unitPrice: 18.99, totalPrice: 18.99, category: .main, tags: []),
+                ReceiptItem(name: "Garlic Bread", quantity: 1, unitPrice: 5.99, totalPrice: 5.99, category: .side, tags: []),
+                ReceiptItem(name: "Coca Cola 2L", quantity: 1, unitPrice: 3.49, totalPrice: 3.49, category: .beverage, tags: [])
+            ],
+            subtotal: 28.47,
+            tax: 2.28,
+            tip: 5.00,
+            total: 35.75,
+            currency: currencyManager.currencySymbol,
+            scanType: .qrCode,
+            category: .food,
+            receiptType: .received
+        )
+
+        // Example 1 participants
+        let sarah = Participant(id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!, name: "Sarah", phoneNumber: "+1234567890", avatarColor: "#FF6B6B")
+        let mike = Participant(id: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!, name: "Mike", phoneNumber: "+1234567891", avatarColor: "#4ECDC4")
+        let you1 = Participant(id: UUID(uuidString: "10000000-0000-0000-0000-000000000003")!, name: "You", phoneNumber: authManager.currentUserPhoneNumber ?? "+1234567892", avatarColor: "#45B7D1")
+
+        let config1 = SplitConfiguration(
+            receiptId: receipt1.id,
+            splitType: .equal,
+            participants: [sarah, mike, you1],
+            includeTax: true,
+            includeTip: true,
+            paidParticipants: [sarah.id],  // Sarah has already paid
+            adminId: sarah.id  // Sarah created this bill
+        )
+
+        // Example 2: By Item Assignment (5 participants)
+        let receipt2 = Receipt(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
+            storeName: "Coffee Corner",
+            storeAddress: "456 Oak Ave",
+            date: Calendar.current.date(byAdding: .hour, value: -5, to: Date()) ?? Date(),
+            createdAt: Calendar.current.date(byAdding: .hour, value: -5, to: Date()) ?? Date(),
+            items: [
+                ReceiptItem(id: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!, name: "Caramel Latte", quantity: 1, unitPrice: 5.50, totalPrice: 5.50, category: .beverage, tags: []),
+                ReceiptItem(id: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!, name: "Cappuccino", quantity: 1, unitPrice: 4.75, totalPrice: 4.75, category: .beverage, tags: []),
+                ReceiptItem(id: UUID(uuidString: "10000000-0000-0000-0000-000000000003")!, name: "Iced Americano", quantity: 1, unitPrice: 4.25, totalPrice: 4.25, category: .beverage, tags: []),
+                ReceiptItem(id: UUID(uuidString: "10000000-0000-0000-0000-000000000004")!, name: "Matcha Latte", quantity: 1, unitPrice: 6.00, totalPrice: 6.00, category: .beverage, tags: []),
+                ReceiptItem(id: UUID(uuidString: "10000000-0000-0000-0000-000000000005")!, name: "Espresso", quantity: 1, unitPrice: 3.50, totalPrice: 3.50, category: .beverage, tags: []),
+                ReceiptItem(id: UUID(uuidString: "10000000-0000-0000-0000-000000000006")!, name: "Chocolate Muffin", quantity: 2, unitPrice: 3.25, totalPrice: 6.50, category: .food, tags: []),
+                ReceiptItem(id: UUID(uuidString: "10000000-0000-0000-0000-000000000007")!, name: "Croissant", quantity: 2, unitPrice: 3.50, totalPrice: 7.00, category: .food, tags: [])
+            ],
+            subtotal: 37.50,
+            tax: 3.00,
+            tip: 6.50,
+            total: 47.00,
+            currency: currencyManager.currencySymbol,
+            scanType: .qrCode,
+            category: .food,
+            receiptType: .received
+        )
+
+        let participant1 = Participant(id: UUID(uuidString: "20000000-0000-0000-0000-000000000001")!, name: "Emma", phoneNumber: "+1234567893", avatarColor: "#95E1D3")
+        let participant2 = Participant(id: UUID(uuidString: "20000000-0000-0000-0000-000000000002")!, name: "John", phoneNumber: "+1234567894", avatarColor: "#F38181")
+        let participant3 = Participant(id: UUID(uuidString: "20000000-0000-0000-0000-000000000003")!, name: "Rachel", phoneNumber: "+1234567895", avatarColor: "#FF9A8B")
+        let participant4 = Participant(id: UUID(uuidString: "20000000-0000-0000-0000-000000000004")!, name: "David", phoneNumber: "+1234567896", avatarColor: "#6A89CC")
+        let participant5 = Participant(id: UUID(uuidString: "20000000-0000-0000-0000-000000000005")!, name: "You", phoneNumber: authManager.currentUserPhoneNumber ?? "+1234567897", avatarColor: "#AA96DA")
+
+        var config2 = SplitConfiguration(
+            receiptId: receipt2.id,
+            splitType: .individual,
+            participants: [participant1, participant2, participant3, participant4, participant5],
+            includeTax: true,
+            includeTip: true,
+            paidParticipants: [participant1.id, participant2.id],  // Emma and John have already paid
+            adminId: participant1.id  // Emma created this bill
+        )
+
+        // Assign items to participants
+        config2.itemAssignments = [
+            // Emma's Caramel Latte
+            ItemAssignment(
+                itemId: UUID(uuidString: "10000000-0000-0000-0000-000000000001")!,
+                participants: [participant1.id],
+                splitType: .equal
+            ),
+            // John's Cappuccino
+            ItemAssignment(
+                itemId: UUID(uuidString: "10000000-0000-0000-0000-000000000002")!,
+                participants: [participant2.id],
+                splitType: .equal
+            ),
+            // Rachel's Iced Americano
+            ItemAssignment(
+                itemId: UUID(uuidString: "10000000-0000-0000-0000-000000000003")!,
+                participants: [participant3.id],
+                splitType: .equal
+            ),
+            // David's Matcha Latte
+            ItemAssignment(
+                itemId: UUID(uuidString: "10000000-0000-0000-0000-000000000004")!,
+                participants: [participant4.id],
+                splitType: .equal
+            ),
+            // Your Espresso
+            ItemAssignment(
+                itemId: UUID(uuidString: "10000000-0000-0000-0000-000000000005")!,
+                participants: [participant5.id],
+                splitType: .equal
+            ),
+            // Chocolate Muffins (shared by Emma, Rachel, and You)
+            ItemAssignment(
+                itemId: UUID(uuidString: "10000000-0000-0000-0000-000000000006")!,
+                participants: [participant1.id, participant3.id, participant5.id],
+                splitType: .equal
+            ),
+            // Croissants (shared by John, David, and You)
+            ItemAssignment(
+                itemId: UUID(uuidString: "10000000-0000-0000-0000-000000000007")!,
+                participants: [participant2.id, participant4.id, participant5.id],
+                splitType: .equal
+            )
+        ]
+
+        return [
+            (receipt: receipt1, config: config1),
+            (receipt: receipt2, config: config2)
+        ]
+    }
+
+    private var exampleSentReceipts: [(receipt: Receipt, config: SplitConfiguration)] {
+        // Example 1: Restaurant Split (Equal)
+        let receipt1 = Receipt(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
+            storeName: "Bella Italia",
+            storeAddress: "789 Main St",
+            date: Calendar.current.date(byAdding: .day, value: -2, to: Date()) ?? Date(),
+            createdAt: Calendar.current.date(byAdding: .day, value: -2, to: Date()) ?? Date(),
+            items: [
+                ReceiptItem(id: UUID(uuidString: "30000000-0000-0000-0000-000000000001")!, name: "Pasta Carbonara", quantity: 2, unitPrice: 16.50, totalPrice: 33.00, category: .main, tags: []),
+                ReceiptItem(id: UUID(uuidString: "30000000-0000-0000-0000-000000000002")!, name: "Margherita Pizza", quantity: 1, unitPrice: 14.00, totalPrice: 14.00, category: .main, tags: []),
+                ReceiptItem(id: UUID(uuidString: "30000000-0000-0000-0000-000000000003")!, name: "Caesar Salad", quantity: 2, unitPrice: 8.50, totalPrice: 17.00, category: .appetizer, tags: []),
+                ReceiptItem(id: UUID(uuidString: "30000000-0000-0000-0000-000000000004")!, name: "Tiramisu", quantity: 1, unitPrice: 7.50, totalPrice: 7.50, category: .dessert, tags: [])
+            ],
+            subtotal: 71.50,
+            tax: 5.72,
+            tip: 12.00,
+            total: 89.22,
+            currency: currencyManager.currencySymbol,
+            scanType: .qrCode,
+            category: .food,
+            receiptType: .sent
+        )
+
+        let alex1 = Participant(id: UUID(uuidString: "40000000-0000-0000-0000-000000000001")!, name: "Alex", phoneNumber: "+1234567898", avatarColor: "#66D9EF")
+        let maria1 = Participant(id: UUID(uuidString: "40000000-0000-0000-0000-000000000002")!, name: "Maria", phoneNumber: "+1234567899", avatarColor: "#F92672")
+        let you3 = Participant(id: UUID(uuidString: "40000000-0000-0000-0000-000000000003")!, name: "You", phoneNumber: authManager.currentUserPhoneNumber ?? "+1234567900", avatarColor: "#A6E22E")
+
+        let config1 = SplitConfiguration(
+            receiptId: receipt1.id,
+            splitType: .equal,
+            participants: [alex1, maria1, you3],
+            includeTax: true,
+            includeTip: true,
+            paidParticipants: [you3.id],  // You have already paid
+            adminId: you3.id  // You created this bill
+        )
+
+        // Example 2: Movie Night (By Item - 4 participants)
+        let receipt2 = Receipt(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000004")!,
+            storeName: "CineMax Theater",
+            storeAddress: "321 Cinema Blvd",
+            date: Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date(),
+            createdAt: Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date(),
+            items: [
+                ReceiptItem(id: UUID(uuidString: "30000000-0000-0000-0000-000000000005")!, name: "Movie Ticket", quantity: 4, unitPrice: 12.50, totalPrice: 50.00, category: .other, tags: []),
+                ReceiptItem(id: UUID(uuidString: "30000000-0000-0000-0000-000000000006")!, name: "Large Popcorn", quantity: 2, unitPrice: 8.00, totalPrice: 16.00, category: .food, tags: []),
+                ReceiptItem(id: UUID(uuidString: "30000000-0000-0000-0000-000000000007")!, name: "Soda", quantity: 4, unitPrice: 5.50, totalPrice: 22.00, category: .beverage, tags: []),
+                ReceiptItem(id: UUID(uuidString: "30000000-0000-0000-0000-000000000008")!, name: "Nachos", quantity: 1, unitPrice: 6.50, totalPrice: 6.50, category: .food, tags: [])
+            ],
+            subtotal: 94.50,
+            tax: 7.56,
+            tip: 0.00,
+            total: 102.06,
+            currency: currencyManager.currencySymbol,
+            scanType: .qrCode,
+            category: .entertainment,
+            receiptType: .sent
+        )
+
+        let chris = Participant(id: UUID(uuidString: "40000000-0000-0000-0000-000000000004")!, name: "Chris", phoneNumber: "+1234567901", avatarColor: "#FD971F")
+        let sam = Participant(id: UUID(uuidString: "40000000-0000-0000-0000-000000000005")!, name: "Sam", phoneNumber: "+1234567902", avatarColor: "#AE81FF")
+        let taylor = Participant(id: UUID(uuidString: "40000000-0000-0000-0000-000000000006")!, name: "Taylor", phoneNumber: "+1234567903", avatarColor: "#E6DB74")
+        let you4 = Participant(id: UUID(uuidString: "40000000-0000-0000-0000-000000000007")!, name: "You", phoneNumber: authManager.currentUserPhoneNumber ?? "+1234567904", avatarColor: "#A6E22E")
+
+        var config2 = SplitConfiguration(
+            receiptId: receipt2.id,
+            splitType: .individual,
+            participants: [chris, sam, taylor, you4],
+            includeTax: true,
+            includeTip: false,
+            paidParticipants: [you4.id, chris.id, sam.id],  // You, Chris, and Sam have paid
+            adminId: you4.id  // You created this bill
+        )
+
+        // Assign items to participants
+        config2.itemAssignments = [
+            // Movie tickets - everyone gets one
+            ItemAssignment(
+                itemId: UUID(uuidString: "30000000-0000-0000-0000-000000000005")!,
+                participants: [chris.id, sam.id, taylor.id, you4.id],
+                splitType: .equal
+            ),
+            // Popcorn - shared by Chris and Sam
+            ItemAssignment(
+                itemId: UUID(uuidString: "30000000-0000-0000-0000-000000000006")!,
+                participants: [chris.id, sam.id],
+                splitType: .equal
+            ),
+            // Sodas - everyone gets one
+            ItemAssignment(
+                itemId: UUID(uuidString: "30000000-0000-0000-0000-000000000007")!,
+                participants: [chris.id, sam.id, taylor.id, you4.id],
+                splitType: .equal
+            ),
+            // Nachos - just Taylor
+            ItemAssignment(
+                itemId: UUID(uuidString: "30000000-0000-0000-0000-000000000008")!,
+                participants: [taylor.id],
+                splitType: .equal
+            )
+        ]
+
+        return [
+            (receipt: receipt1, config: config1),
+            (receipt: receipt2, config: config2)
+        ]
+    }
+
+    var filteredRecentActivity: [(receipt: Receipt, config: SplitConfiguration)] {
+        // Get current user's phone number for filtering
+        let currentUserPhone = authManager.currentUserPhoneNumber
+
+        var activities = recentActivity.filter { activity in
+            // Filter by receipt type
+            let matchesTab = switch selectedReceiptTab {
+            case .received:
+                activity.receipt.receiptType == .received
+            case .sent:
+                activity.receipt.receiptType == .sent
+            }
+
+            // For sent receipts, only show if current user is the admin
+            if selectedReceiptTab == .sent {
+                // Check if current user created this receipt
+                if let adminId = activity.config.adminId {
+                    let isCurrentUserAdmin = activity.config.participants.contains { participant in
+                        // Match if participant is the admin AND either:
+                        // 1. The participant is named "You", OR
+                        // 2. The phone number matches the current user's phone number
+                        participant.id == adminId && (
+                            participant.name == "You" ||
+                            participant.phoneNumber == currentUserPhone
+                        )
+                    }
+                    return matchesTab && isCurrentUserAdmin
+                }
+                // For backward compatibility, also show sent receipts without adminId
+                // (these are receipts created before the admin feature was added)
+                return matchesTab
+            }
+
+            return matchesTab
+        }
+
+        // Add example receipts to their respective tabs
+        if selectedReceiptTab == .received {
+            activities = exampleReceivedReceipts + activities
+        } else if selectedReceiptTab == .sent {
+            activities = exampleSentReceipts + activities
+        }
+
+        return activities
+    }
 
     var body: some View {
         NavigationView {
+            ZStack {
             ScrollView {
                 VStack(spacing: 20) {
                     // Header Section
@@ -39,18 +336,24 @@ struct HomeView: View {
 
                             Spacer()
 
-                            // Profile Button
-                            Button(action: {
-                                showingProfile = true
-                            }) {
-                                ZStack {
-                                    Circle()
-                                        .fill(.ultraThinMaterial)
-                                        .frame(width: 44, height: 44)
+                            // Currency Switcher and Profile Button
+                            HStack(spacing: 12) {
+                                // Currency Switcher
+                                CurrencySwitcherView()
 
-                                    Image(systemName: "person.circle.fill")
-                                        .font(.system(size: 24))
-                                        .foregroundColor(.blue)
+                                // Profile Button
+                                Button(action: {
+                                    showingProfile = true
+                                }) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(.ultraThinMaterial)
+                                            .frame(width: 44, height: 44)
+
+                                        Image(systemName: "person.circle.fill")
+                                            .font(.system(size: 24))
+                                            .foregroundColor(.blue)
+                                    }
                                 }
                             }
                         }
@@ -72,7 +375,7 @@ struct HomeView: View {
                                     Spacer()
                                 }
 
-                                Text("$\(walletBalance, specifier: "%.2f")")
+                                Text(currencyManager.format(amount: walletManager.walletBalance))
                                     .font(.system(size: 22, weight: .bold))
                                     .foregroundColor(.primary)
                             }
@@ -100,7 +403,7 @@ struct HomeView: View {
                                     Spacer()
                                 }
 
-                                Text("$\(pendingAmount, specifier: "%.2f")")
+                                Text(currencyManager.format(amount: billSplitManager.calculateTotalPendingPayments()))
                                     .font(.system(size: 22, weight: .bold))
                                     .foregroundColor(.primary)
                             }
@@ -158,16 +461,9 @@ struct HomeView: View {
                                     title: "Add Funds",
                                     subtitle: "Top up wallet",
                                     color: .green,
-                                    action: {}
-                                )
-
-                                // Send Reminder Action
-                                QuickActionCard(
-                                    icon: "bell.fill",
-                                    title: "Send Reminder",
-                                    subtitle: "Nudge friends",
-                                    color: .orange,
-                                    action: {}
+                                    action: {
+                                        showingAddFunds = true
+                                    }
                                 )
                             }
                             .padding(.horizontal, 20)
@@ -175,7 +471,7 @@ struct HomeView: View {
                     }
 
                     // Recent Activity Section
-                    if !recentActivity.isEmpty {
+                    if !filteredRecentActivity.isEmpty {
                         VStack(alignment: .leading, spacing: 16) {
                             HStack {
                                 Text("Recent Activity")
@@ -192,8 +488,46 @@ struct HomeView: View {
                             }
                             .padding(.horizontal, 20)
 
+                            // Tab Selector
+                            HStack(spacing: 0) {
+                                Button(action: {
+                                    withAnimation {
+                                        selectedReceiptTab = .received
+                                    }
+                                }) {
+                                    VStack(spacing: 8) {
+                                        Text("Received")
+                                            .font(.system(size: 15, weight: selectedReceiptTab == .received ? .semibold : .medium))
+                                            .foregroundColor(selectedReceiptTab == .received ? .blue : .secondary)
+
+                                        Rectangle()
+                                            .fill(selectedReceiptTab == .received ? Color.blue : Color.clear)
+                                            .frame(height: 2)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+
+                                Button(action: {
+                                    withAnimation {
+                                        selectedReceiptTab = .sent
+                                    }
+                                }) {
+                                    VStack(spacing: 8) {
+                                        Text("Sent")
+                                            .font(.system(size: 15, weight: selectedReceiptTab == .sent ? .semibold : .medium))
+                                            .foregroundColor(selectedReceiptTab == .sent ? .blue : .secondary)
+
+                                        Rectangle()
+                                            .fill(selectedReceiptTab == .sent ? Color.blue : Color.clear)
+                                            .frame(height: 2)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .padding(.horizontal, 20)
+
                             VStack(spacing: 12) {
-                                ForEach(recentActivity.prefix(5), id: \.receipt.id) { activity in
+                                ForEach(filteredRecentActivity.prefix(5), id: \.receipt.id) { activity in
                                     BillSplitCard(
                                         receipt: activity.receipt,
                                         configuration: activity.config,
@@ -223,12 +557,29 @@ struct HomeView: View {
                 )
             )
             .navigationBarHidden(true)
+
+            // Fixed attribution text at bottom
+            VStack {
+                Spacer()
+
+                if #available(iOS 18.0, *) {
+                    LiquidGlassAttributionView()
+                        .padding(.bottom, 10) // Space above tab bar
+                } else {
+                    FallbackAttributionView()
+                        .padding(.bottom, 10) // Space above tab bar
+                }
+            }
+            }
             .onAppear {
                 isAnimating = true
                 loadRecentActivity()
+                walletManager.createExampleWalletEntries()
+                walletManager.refresh()
             }
             .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("BillSplitUpdated"))) { _ in
                 loadRecentActivity()
+                walletManager.refresh()
             }
             .sheet(isPresented: $showingProfile) {
                 ProfileView()
@@ -236,12 +587,30 @@ struct HomeView: View {
             .sheet(isPresented: $showingAllSplits) {
                 AllBillSplitsView()
             }
+            .sheet(isPresented: $showingAddFunds) {
+                AddFundsView(isPresented: $showingAddFunds)
+            }
             .fullScreenCover(item: $selectedSplitReceipt, onDismiss: {
                 // Reload data when returning from split view
                 loadRecentActivity()
+                walletManager.refresh()
             }) { receipt in
-                if let config = billSplitManager.getConfiguration(for: receipt.id) {
-                    SplitSummaryView(receipt: receipt, configuration: config)
+                // Check if this is an example receipt (should not be saved)
+                let isExampleReceipt = receipt.id.uuidString.hasPrefix("00000000-0000-0000-0000")
+
+                if isExampleReceipt {
+                    // For example receipts, find the example config
+                    if let exampleActivity = exampleReceivedReceipts.first(where: { $0.receipt.id == receipt.id }) {
+                        ReadOnlySplitSummaryView(receipt: receipt, configuration: exampleActivity.config)
+                    } else if let exampleActivity = exampleSentReceipts.first(where: { $0.receipt.id == receipt.id }) {
+                        SentReceiptView(receipt: receipt, configuration: exampleActivity.config)
+                    }
+                } else if let config = billSplitManager.getConfiguration(for: receipt.id) {
+                    if receipt.receiptType == .sent {
+                        SentReceiptView(receipt: receipt, configuration: config)
+                    } else {
+                        SplitSummaryView(receipt: receipt, configuration: config)
+                    }
                 } else {
                     BillSplitView(receipt: receipt)
                 }
@@ -314,6 +683,7 @@ struct RecentActivityCard: View {
     let receipt: Receipt
     let configuration: SplitConfiguration
     let onTap: () -> Void
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     private var participantCount: Int {
         configuration.participants.count
@@ -340,20 +710,29 @@ struct RecentActivityCard: View {
     }
 
     private var status: String {
-        let calendar = Calendar.current
-        let now = Date()
-        let updateDate = configuration.updatedAt
+        // For sent receipts, check if all participants have paid
+        if receipt.receiptType == .sent {
+            let summaries = BillSplitManager.shared.generateSplitSummaries(receipt: receipt, config: configuration)
+            let allPaid = summaries.allSatisfy { $0.isPaid }
 
-        if let days = calendar.dateComponents([.day], from: updateDate, to: now).day {
-            if days >= 2 {
+            if allPaid {
                 return "completed"
-            } else if days >= 1 {
-                return "pending"
             } else {
-                return "recent"
+                // Check if there's any paid participant
+                let anyPaid = summaries.contains { $0.isPaid }
+                return anyPaid ? "pending" : "pending"
             }
+        } else {
+            // For received receipts, check payment status
+            let summaries = BillSplitManager.shared.generateSplitSummaries(receipt: receipt, config: configuration)
+            let userSummary = summaries.first { $0.participant.name == "You" }
+
+            if let userSummary = userSummary {
+                return userSummary.isPaid ? "completed" : "pending"
+            }
+
+            return "pending"
         }
-        return "recent"
     }
 
     private var statusColor: Color {
@@ -416,7 +795,7 @@ struct RecentActivityCard: View {
 
                 // Amount and Status
                 VStack(alignment: .trailing, spacing: 4) {
-                    Text("$\(receipt.total, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.total))
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.primary)
 
@@ -446,6 +825,7 @@ struct ProfileView: View {
     @ObservedObject private var authManager = AuthenticationManager.shared
     @Environment(\.dismiss) private var dismiss
     @State private var showingEditProfile = false
+    @State private var showingNotificationSettings = false
 
     var userName: String {
         return authManager.currentUserName ?? "User"
@@ -516,6 +896,15 @@ struct ProfileView: View {
                         )
 
                         ProfileOptionCard(
+                            icon: "bell.fill",
+                            title: "Notification Settings",
+                            subtitle: "Manage payment reminders",
+                            action: {
+                                showingNotificationSettings = true
+                            }
+                        )
+
+                        ProfileOptionCard(
                             icon: "arrow.right.square.fill",
                             title: "Logout",
                             subtitle: "Sign out of your account",
@@ -539,7 +928,16 @@ struct ProfileView: View {
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.secondary)
                     }
-                    .padding(.top, 20)
+                    .padding(.top, 10)
+
+                    // Attribution
+                    if #available(iOS 18.0, *) {
+                        LiquidGlassAttributionView()
+                            .padding(.top, -5)
+                    } else {
+                        FallbackAttributionView()
+                            .padding(.top, -5)
+                    }
 
                     Spacer(minLength: 40)
                 }
@@ -560,6 +958,9 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showingEditProfile) {
             EditProfileView()
+        }
+        .sheet(isPresented: $showingNotificationSettings) {
+            NotificationSettingsView()
         }
     }
 }
@@ -619,6 +1020,7 @@ struct BillSplitCard: View {
     let receipt: Receipt
     let configuration: SplitConfiguration
     let onTap: () -> Void
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     private var participantCount: Int {
         configuration.participants.count
@@ -662,7 +1064,7 @@ struct BillSplitCard: View {
 
                         Spacer()
 
-                        Text("$\(totalAmount, specifier: "%.2f")")
+                        Text(currencyManager.format(amount: totalAmount))
                             .font(.system(size: 18, weight: .bold))
                             .foregroundColor(.primary)
                     }
@@ -763,6 +1165,105 @@ struct BillSplitCard: View {
             )
         }
         .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Attribution Views
+
+struct FallbackAttributionView: View {
+    var body: some View {
+        Text("By: Ahmad Alali & Bader alqahtani")
+            .font(.system(size: 16, weight: .semibold, design: .rounded))
+            .foregroundStyle(
+                LinearGradient(
+                    gradient: Gradient(colors: [.blue, .cyan, .purple]),
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.ultraThinMaterial)
+                    .shadow(color: .blue.opacity(0.2), radius: 8, x: 0, y: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        LinearGradient(
+                            gradient: Gradient(colors: [.blue.opacity(0.5), .cyan.opacity(0.5), .purple.opacity(0.5)]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        lineWidth: 1.5
+                    )
+            )
+    }
+}
+
+@available(iOS 18.0, *)
+struct LiquidGlassAttributionView: View {
+    @State private var positions: [SIMD2<Float>] = [
+        .init(x: 0, y: 0), .init(x: 0.5, y: 0), .init(x: 1, y: 0),
+        .init(x: 0, y: 0.5), .init(x: 0.5, y: 0.5), .init(x: 1, y: 0.5),
+        .init(x: 0, y: 1), .init(x: 0.5, y: 1), .init(x: 1, y: 1)
+    ]
+
+    let timer = Timer.publish(every: 1/10, on: .current, in: .common).autoconnect()
+
+    var body: some View {
+        Text("By: Ahmad Alali & Bader alqahtani")
+            .font(.system(size: 16, weight: .semibold, design: .rounded))
+            .foregroundColor(.white)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                ZStack {
+                    // iOS 18 Mesh Gradient for liquid effect
+                    MeshGradient(
+                        width: 3,
+                        height: 3,
+                        points: positions,
+                        colors: [
+                            .blue, .blue.opacity(0.8), .cyan,
+                            .purple.opacity(0.7), .blue.opacity(0.9), .cyan.opacity(0.8),
+                            .purple, .purple.opacity(0.8), .blue
+                        ]
+                    )
+
+                    // Frosted glass overlay
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.ultraThinMaterial)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: .blue.opacity(0.4), radius: 12, x: 0, y: 6)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(
+                        .white.opacity(0.3),
+                        lineWidth: 1
+                    )
+            )
+            .onReceive(timer) { _ in
+                withAnimation(.easeInOut(duration: 2)) {
+                    // Animate middle points for fluid effect
+                    positions[1] = randomizePosition(base: SIMD2<Float>(x: 0.5, y: 0))
+                    positions[3] = randomizePosition(base: SIMD2<Float>(x: 0, y: 0.5))
+                    positions[4] = randomizePosition(base: SIMD2<Float>(x: 0.5, y: 0.5))
+                    positions[5] = randomizePosition(base: SIMD2<Float>(x: 1, y: 0.5))
+                    positions[7] = randomizePosition(base: SIMD2<Float>(x: 0.5, y: 1))
+                }
+            }
+    }
+
+    private func randomizePosition(base: SIMD2<Float>) -> SIMD2<Float> {
+        let range: Float = 0.15
+        return SIMD2<Float>(
+            x: base.x + Float.random(in: -range...range),
+            y: base.y + Float.random(in: -range...range)
+        )
     }
 }
 

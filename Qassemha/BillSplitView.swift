@@ -10,6 +10,8 @@ import SwiftUI
 struct BillSplitView: View {
     let receipt: Receipt
     @StateObject private var manager = BillSplitManager.shared
+    @StateObject private var authManager = AuthenticationManager.shared
+    @ObservedObject private var currencyManager = CurrencyManager.shared
     @State private var configuration: SplitConfiguration
     @State private var showingParticipantSelection = false
     @State private var showingItemAssignment = false
@@ -20,7 +22,17 @@ struct BillSplitView: View {
 
     init(receipt: Receipt) {
         self.receipt = receipt
-        _configuration = State(initialValue: BillSplitManager.shared.getConfiguration(for: receipt.id) ?? SplitConfiguration(receiptId: receipt.id))
+        var config = BillSplitManager.shared.getConfiguration(for: receipt.id) ?? SplitConfiguration(receiptId: receipt.id)
+
+        // For sent receipts, ensure current user is added as admin if not already set
+        if receipt.receiptType == .sent && config.adminId == nil {
+            // Find if there's already a "You" participant
+            if let youParticipant = config.participants.first(where: { $0.name == "You" }) {
+                config.adminId = youParticipant.id
+            }
+        }
+
+        _configuration = State(initialValue: config)
     }
 
     var body: some View {
@@ -85,6 +97,7 @@ struct BillSplitView: View {
                         }
 
                         Button("View Split") {
+                            ensureAdminIsSet()
                             showingSplitSummary = true
                         }
                         .foregroundColor(.blue)
@@ -109,6 +122,10 @@ struct BillSplitView: View {
         .onChange(of: configuration) { newConfig in
             manager.updateConfiguration(newConfig)
         }
+        .onAppear {
+            // Ensure admin is set when view appears
+            ensureAdminIsSet()
+        }
         .alert("Reset Bill Split", isPresented: $showingResetConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Reset", role: .destructive) {
@@ -124,6 +141,36 @@ struct BillSplitView: View {
     private func resetSplit() {
         configuration = SplitConfiguration(receiptId: receipt.id)
         manager.updateConfiguration(configuration)
+    }
+
+    private func ensureAdminIsSet() {
+        // For sent receipts, ensure adminId is set
+        if receipt.receiptType == .sent && configuration.adminId == nil {
+            // Try to find participant named "You" first
+            if let youParticipant = configuration.participants.first(where: { $0.name == "You" }) {
+                configuration.adminId = youParticipant.id
+                configuration.updatedAt = Date()
+                return
+            }
+
+            // Try to find participant with current user's phone number
+            if let currentPhone = authManager.currentUserPhoneNumber,
+               let matchingParticipant = configuration.participants.first(where: { $0.phoneNumber == currentPhone }) {
+                configuration.adminId = matchingParticipant.id
+                configuration.updatedAt = Date()
+                return
+            }
+
+            // If no "You" participant exists, add one and set as admin
+            let youParticipant = Participant(
+                name: "You",
+                phoneNumber: authManager.currentUserPhoneNumber,
+                avatarColor: "#45B7D1"
+            )
+            configuration.participants.insert(youParticipant, at: 0)
+            configuration.adminId = youParticipant.id
+            configuration.updatedAt = Date()
+        }
     }
 
     // MARK: - Receipt Header Section
@@ -158,7 +205,7 @@ struct BillSplitView: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
 
-                    Text("\(receipt.currency)\(receipt.total, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.total))
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.primary)
                 }
@@ -182,7 +229,7 @@ struct BillSplitView: View {
                     Text("Tax")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("\(receipt.currency)\(receipt.tax, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.tax))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -193,7 +240,7 @@ struct BillSplitView: View {
                     Text("Tip")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("\(receipt.currency)\(receipt.tip, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.tip))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -452,7 +499,7 @@ struct BillSplitView: View {
 
                                 Spacer()
 
-                                Text("\(receipt.currency)\(summary.total, specifier: "%.2f")")
+                                Text(currencyManager.format(amount: summary.total))
                                     .font(.system(size: 18, weight: .bold))
                                     .foregroundColor(.blue)
                             }
