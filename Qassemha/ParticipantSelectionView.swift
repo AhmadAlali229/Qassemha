@@ -253,6 +253,13 @@ struct ParticipantSelectionView: View {
             }
         }
 
+        // For sent receipts, set adminId if not already set and there's a "You" participant
+        if receipt.receiptType == .sent && configuration.adminId == nil {
+            if let youParticipant = configuration.participants.first(where: { $0.name == "You" }) {
+                configuration.adminId = youParticipant.id
+            }
+        }
+
         configuration.updatedAt = Date()
     }
 

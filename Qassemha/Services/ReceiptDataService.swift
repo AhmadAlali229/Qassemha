@@ -92,6 +92,7 @@ class ReceiptDataService {
         storedReceipt.imageData = receipt.imageData
         storedReceipt.scanType = receipt.scanType.rawValue
         storedReceipt.category = receipt.category.rawValue
+        storedReceipt.receiptType = receipt.receiptType.rawValue
         storedReceipt.createdAt = Date()
 
         // Create items
@@ -138,6 +139,7 @@ class ReceiptDataService {
 
         let scanType = Receipt.ScanType(rawValue: scanTypeStr) ?? .qrCode
         let category = Receipt.ReceiptCategory(rawValue: categoryStr) ?? .other
+        let receiptType = Receipt.ReceiptType(rawValue: storedReceipt.receiptType ?? "Sent") ?? .sent
 
         // Convert items
         let items = (storedReceipt.items?.allObjects as? [StoredReceiptItem] ?? []).compactMap { storedItem -> ReceiptItem? in
@@ -168,6 +170,7 @@ class ReceiptDataService {
             storeName: storeName,
             storeAddress: storedReceipt.storeAddress,
             date: date,
+            createdAt: storedReceipt.createdAt ?? Date(),
             items: items,
             subtotal: storedReceipt.subtotal,
             tax: storedReceipt.tax,
@@ -177,7 +180,8 @@ class ReceiptDataService {
             receiptNumber: storedReceipt.receiptNumber,
             imageData: storedReceipt.imageData,
             scanType: scanType,
-            category: category
+            category: category,
+            receiptType: receiptType
         )
     }
 
@@ -239,13 +243,14 @@ class ReceiptDataService {
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        dateFormatter.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        dateFormatter.timeZone = TimeZone.current  // Use device's local timezone
         let receiptDate = dateFormatter.date(from: "2025-10-05 15:02:04") ?? Date()
 
         let receipt = Receipt(
-            storeName: "All Alhussain",
+            storeName: "Bait al-saharma",
             storeAddress: nil,
             date: receiptDate,
+            createdAt: Date(),
             items: items,
             subtotal: 145.22,
             tax: 21.78,
@@ -255,7 +260,8 @@ class ReceiptDataService {
             receiptNumber: "310464901200003",
             imageData: nil,
             scanType: .qrCode,
-            category: .food
+            category: .food,
+            receiptType: .received
         )
 
         return receipt
@@ -347,13 +353,14 @@ class ReceiptDataService {
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
-        dateFormatter.timeZone = TimeZone(identifier: "Asia/Riyadh")
+        dateFormatter.timeZone = TimeZone.current  // Use device's local timezone
         let receiptDate = dateFormatter.date(from: "2025-09-30T20:04:05Z") ?? Date()
 
         let receipt = Receipt(
             storeName: "محل تقاطع وحمام للتجارة - الفرع 3",
             storeAddress: "Riyadh, حي الهدية – شارع القلم",
             date: receiptDate,
+            createdAt: Date(),
             items: items,
             subtotal: 137.38,
             tax: 20.62,
@@ -363,7 +370,8 @@ class ReceiptDataService {
             receiptNumber: "300705521800003",
             imageData: nil,
             scanType: .qrCode,
-            category: .groceries
+            category: .groceries,
+            receiptType: .received
         )
 
         return receipt

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct AllBillSplitsView: View {
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var authManager = AuthenticationManager.shared
     @StateObject private var billSplitManager = BillSplitManager.shared
     @State private var allSplits: [(receipt: Receipt, config: SplitConfiguration)] = []
     @State private var selectedSplitReceipt: Receipt?
@@ -135,10 +136,32 @@ struct AllBillSplitsView: View {
     private func loadAllSplits() {
         let receipts = CoreDataManager.shared.getSavedReceipts()
 
+        // Filter by user - only show receipts created by current user (or examples)
+        let currentUserPhone = authManager.currentUserPhoneNumber
+
         allSplits = receipts.compactMap { receipt in
             if let config = billSplitManager.getConfiguration(for: receipt.id),
                !config.participants.isEmpty {
-                return (receipt: receipt, config: config)
+                // Always show example receipts
+                let isExample = receipt.id.uuidString.hasPrefix("00000000-0000-0000-0000")
+                if isExample {
+                    return (receipt: receipt, config: config)
+                }
+
+                // If config has adminId, only show if current user is the admin
+                if let adminId = config.adminId {
+                    let isCurrentUserAdmin = config.participants.contains { participant in
+                        participant.id == adminId && participant.phoneNumber == currentUserPhone
+                    }
+                    if isCurrentUserAdmin {
+                        return (receipt: receipt, config: config)
+                    }
+                } else {
+                    // If config exists but no adminId, show it (legacy receipts)
+                    return (receipt: receipt, config: config)
+                }
+
+                return nil
             }
             return nil
         }

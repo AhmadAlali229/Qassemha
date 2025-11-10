@@ -15,6 +15,7 @@ struct Receipt: Identifiable, Codable, Equatable {
     var storeName: String
     var storeAddress: String?
     var date: Date
+    var createdAt: Date  // Date when receipt was scanned/created
     var items: [ReceiptItem]
     var subtotal: Double
     var tax: Double
@@ -25,12 +26,14 @@ struct Receipt: Identifiable, Codable, Equatable {
     var imageData: Data?
     var scanType: ScanType
     var category: ReceiptCategory
+    var receiptType: ReceiptType  // Sent or Received
 
-    init(id: UUID = UUID(), storeName: String, storeAddress: String? = nil, date: Date, items: [ReceiptItem], subtotal: Double, tax: Double, tip: Double, total: Double, currency: String, receiptNumber: String? = nil, imageData: Data? = nil, scanType: ScanType, category: ReceiptCategory) {
+    init(id: UUID = UUID(), storeName: String, storeAddress: String? = nil, date: Date, createdAt: Date = Date(), items: [ReceiptItem], subtotal: Double, tax: Double, tip: Double, total: Double, currency: String, receiptNumber: String? = nil, imageData: Data? = nil, scanType: ScanType, category: ReceiptCategory, receiptType: ReceiptType = .sent) {
         self.id = id
         self.storeName = storeName
         self.storeAddress = storeAddress
         self.date = date
+        self.createdAt = createdAt
         self.items = items
         self.subtotal = subtotal
         self.tax = tax
@@ -41,6 +44,12 @@ struct Receipt: Identifiable, Codable, Equatable {
         self.imageData = imageData
         self.scanType = scanType
         self.category = category
+        self.receiptType = receiptType
+    }
+
+    enum ReceiptType: String, CaseIterable, Codable {
+        case sent = "Sent"
+        case received = "Received"
     }
 
     enum ScanType: String, CaseIterable, Codable {
@@ -268,6 +277,7 @@ class DemoReceiptData: ObservableObject {
             storeName: "Olive Garden",
             storeAddress: "123 Main St, Anytown, USA",
             date: Date(),
+            createdAt: Date(),
             items: [
                 ReceiptItem(name: "Fettuccine Alfredo", quantity: 1, unitPrice: 16.99, totalPrice: 16.99, category: .main, tags: ["pasta", "creamy"]),
                 ReceiptItem(name: "Caesar Salad", quantity: 1, unitPrice: 8.99, totalPrice: 8.99, category: .appetizer, tags: ["salad", "dressing"]),
@@ -282,13 +292,15 @@ class DemoReceiptData: ObservableObject {
             currency: "USD",
             receiptNumber: "R12345",
             scanType: .camera,
-            category: .food
+            category: .food,
+            receiptType: .sent
         ),
 
         Receipt(
             storeName: "Starbucks",
             storeAddress: "456 Coffee Ave, Bean City, USA",
             date: Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date(),
+            createdAt: Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date(),
             items: [
                 ReceiptItem(name: "Grande Latte", quantity: 2, unitPrice: 5.45, totalPrice: 10.90, category: .beverage, tags: ["coffee", "milk"]),
                 ReceiptItem(name: "Blueberry Muffin", quantity: 1, unitPrice: 3.95, totalPrice: 3.95, category: .food, tags: ["pastry", "berries"]),
@@ -301,13 +313,15 @@ class DemoReceiptData: ObservableObject {
             currency: "USD",
             receiptNumber: "S78910",
             scanType: .qrCode,
-            category: .food
+            category: .food,
+            receiptType: .sent
         ),
 
         Receipt(
             storeName: "Target",
             storeAddress: "789 Shopping Blvd, Mall City, USA",
             date: Calendar.current.date(byAdding: .day, value: -3, to: Date()) ?? Date(),
+            createdAt: Calendar.current.date(byAdding: .day, value: -3, to: Date()) ?? Date(),
             items: [
                 ReceiptItem(name: "Bananas", quantity: 3, unitPrice: 0.68, totalPrice: 2.04, category: .food, tags: ["fruit", "organic"]),
                 ReceiptItem(name: "Milk (1 Gallon)", quantity: 1, unitPrice: 3.29, totalPrice: 3.29, category: .beverage, tags: ["dairy", "whole"]),
@@ -322,7 +336,8 @@ class DemoReceiptData: ObservableObject {
             currency: "USD",
             receiptNumber: "T55667",
             scanType: .barcode,
-            category: .groceries
+            category: .groceries,
+            receiptType: .sent
         )
     ]
 
@@ -539,7 +554,7 @@ class DemoReceiptData: ObservableObject {
         return Receipt(
             storeName: storeName,
             storeAddress: nil,
-            date: Date(),
+            date: extractDate(from: lines),
             items: items,
             subtotal: subtotal,
             tax: tax,
@@ -548,7 +563,8 @@ class DemoReceiptData: ObservableObject {
             currency: currency,
             receiptNumber: nil,
             scanType: .camera,
-            category: .other
+            category: .other,
+            receiptType: .sent
         )
     }
 
@@ -760,7 +776,8 @@ class DemoReceiptData: ObservableObject {
         return Receipt(
             storeName: storeName,
             storeAddress: nil,
-            date: Date(),
+            date: extractDate(from: lines),
+            createdAt: Date(),
             items: items,
             subtotal: subtotal,
             tax: tax,
@@ -769,7 +786,8 @@ class DemoReceiptData: ObservableObject {
             currency: "USD",
             receiptNumber: nil,
             scanType: .camera,
-            category: .other
+            category: .other,
+            receiptType: .sent
         )
     }
 
@@ -2688,6 +2706,82 @@ class DemoReceiptData: ObservableObject {
         return (subtotal, tax, total)
     }
 
+    private func extractDate(from lines: [String]) -> Date {
+        print("📅 Extracting date from receipt...")
+
+        // Common date patterns to match
+        let datePatterns = [
+            // ISO 8601 formats
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd HH:mm:ssZ",
+
+            // Common receipt formats
+            "dd/MM/yyyy HH:mm:ss",
+            "dd/MM/yyyy HH:mm",
+            "dd-MM-yyyy HH:mm:ss",
+            "dd-MM-yyyy HH:mm",
+            "MM/dd/yyyy HH:mm:ss",
+            "MM/dd/yyyy HH:mm",
+            "MM-dd-yyyy HH:mm:ss",
+            "MM-dd-yyyy HH:mm",
+
+            // Date only formats
+            "yyyy-MM-dd",
+            "dd/MM/yyyy",
+            "dd-MM-yyyy",
+            "MM/dd/yyyy",
+            "MM-dd-yyyy",
+
+            // Time formats
+            "dd/MM/yyyy",
+            "MM/dd/yyyy"
+        ]
+
+        // Regex patterns to find dates in text
+        let regexPatterns = [
+            // ISO 8601: 2025-10-05T15:39:21Z or 2025-10-05 15:39:21
+            "\\d{4}-\\d{2}-\\d{2}[T ]\\d{2}:\\d{2}:\\d{2}[Z]?",
+            // Date with slashes: 05/10/2025 15:39:21 or 10/05/2025 15:39
+            "\\d{2}/\\d{2}/\\d{4}[\\s]+\\d{2}:\\d{2}(?::\\d{2})?",
+            // Date with dashes: 05-10-2025 15:39:21
+            "\\d{2}-\\d{2}-\\d{4}[\\s]+\\d{2}:\\d{2}(?::\\d{2})?",
+            // Date only: 2025-10-05, 05/10/2025, 05-10-2025
+            "\\d{4}-\\d{2}-\\d{2}",
+            "\\d{2}/\\d{2}/\\d{4}",
+            "\\d{2}-\\d{2}-\\d{4}"
+        ]
+
+        // Search through all lines for date strings
+        for line in lines {
+            for pattern in regexPatterns {
+                if let regex = try? NSRegularExpression(pattern: pattern),
+                   let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
+                   let range = Range(match.range, in: line) {
+                    let dateString = String(line[range])
+                    print("📅 Found potential date string: '\(dateString)'")
+
+                    // Try to parse with different formatters
+                    for dateFormat in datePatterns {
+                        let formatter = DateFormatter()
+                        formatter.dateFormat = dateFormat
+                        formatter.locale = Locale(identifier: "en_US_POSIX")
+                        formatter.timeZone = TimeZone.current  // Use device's local timezone
+
+                        if let date = formatter.date(from: dateString) {
+                            print("✅ Successfully parsed date: \(date)")
+                            return date
+                        }
+                    }
+                }
+            }
+        }
+
+        print("⚠️ No date found in receipt text, using current date")
+        return Date()
+    }
+
     private func extractItemFromLine(_ line: String) -> ReceiptItem? {
         print("    🔍 Trying to extract item from: '\(line)'")
 
@@ -2940,7 +3034,10 @@ extension Receipt {
     var formattedDate: String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
-        return formatter.string(from: date)
+        formatter.timeStyle = .none
+        formatter.timeZone = TimeZone.current  // Use device's local timezone
+        formatter.locale = Locale.current      // Use device's local locale
+        return formatter.string(from: createdAt)
     }
 
     var itemCount: Int {
