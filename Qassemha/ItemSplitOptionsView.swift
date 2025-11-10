@@ -12,6 +12,7 @@ struct ItemSplitOptionsView: View {
     let receipt: Receipt
     @Binding var configuration: SplitConfiguration
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     @State private var selectedParticipants: Set<UUID> = []
     @State private var itemSplitType: ItemAssignment.ItemSplitType = .equal
@@ -137,7 +138,7 @@ struct ItemSplitOptionsView: View {
 
             Spacer()
 
-            Text("$\(item.totalPrice, specifier: "%.2f")")
+            Text(currencyManager.format(amount: item.totalPrice))
                 .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.primary)
         }
@@ -289,7 +290,7 @@ struct ItemSplitOptionsView: View {
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(isValid ? .green : .orange)
                     } else {
-                        Text("$\(totalAssigned, specifier: "%.2f") / $\(item.totalPrice, specifier: "%.2f")")
+                        Text("\(currencyManager.format(amount: totalAssigned)) / \(currencyManager.format(amount: item.totalPrice))")
                             .font(.system(size: 16, weight: .bold))
                             .foregroundColor(isValid ? .green : .orange)
                     }
@@ -390,7 +391,7 @@ struct ItemSplitOptionsView: View {
 
                                 Spacer()
 
-                                Text("$\(calculateAmount(for: participantId), specifier: "%.2f")")
+                                Text(currencyManager.format(amount: calculateAmount(for: participantId)))
                                     .font(.system(size: 16, weight: .bold))
                                     .foregroundColor(.blue)
                             }

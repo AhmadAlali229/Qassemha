@@ -11,6 +11,7 @@ struct CustomSplitOptionsView: View {
     let receipt: Receipt
     @Binding var configuration: SplitConfiguration
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     var totalAssigned: Double {
         if configuration.splitType == .percentage {
@@ -138,7 +139,7 @@ struct CustomSplitOptionsView: View {
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(isValid ? .green : .orange)
                 } else {
-                    Text("$\(totalAssigned, specifier: "%.2f") / $\(receipt.total, specifier: "%.2f")")
+                    Text("\(currencyManager.format(amount: totalAssigned)) / \(currencyManager.format(amount: receipt.total))")
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(isValid ? .green : .orange)
                 }
