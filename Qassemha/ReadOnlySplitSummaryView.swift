@@ -15,12 +15,14 @@ struct ReadOnlySplitSummaryView: View {
     @StateObject private var walletManager = WalletManager.shared
 
     @State private var selectedSummary: SplitSummary?
-    @State private var participantToPay: SplitSummary?
     @State private var localConfig: SplitConfiguration
     @State private var showInsufficientFundsAlert = false
     @State private var insufficientAmount: Double = 0.0
     @State private var showAddFunds = false
     @State private var showItemSelection = false
+    @State private var showPaymentMethod = false
+    @State private var selectedItemsForPayment: Set<UUID> = []
+    @State private var paymentAmount: Double = 0.0
 
     init(receipt: Receipt, configuration: SplitConfiguration) {
         self.receipt = receipt
@@ -78,20 +80,6 @@ struct ReadOnlySplitSummaryView: View {
                 ParticipantDetailView(summary: summary, receipt: receipt)
             }
         }
-        .sheet(item: $participantToPay) { participant in
-            PaymentMethodSelectionView(
-                isPresented: Binding(
-                    get: { participantToPay != nil },
-                    set: { if !$0 { participantToPay = nil } }
-                ),
-                amount: participant.total,
-                payeeName: participant.participant.name,
-                billSplitID: receipt.id.uuidString,
-                onPaymentComplete: { result in
-                    handlePaymentCompletion(for: participant, result: result)
-                }
-            )
-        }
         .sheet(isPresented: $showAddFunds) {
             AddFundsView(isPresented: $showAddFunds)
         }
@@ -99,8 +87,25 @@ struct ReadOnlySplitSummaryView: View {
             SelectItemsForPaymentView(
                 receipt: receipt,
                 configuration: localConfig,
-                onConfirm: { selectedItems in
-                    handlePayment(for: selectedItems)
+                onConfirm: { selectedItems, amount in
+                    selectedItemsForPayment = selectedItems
+                    paymentAmount = amount
+                    showItemSelection = false
+                    // Small delay to allow sheet dismissal animation
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showPaymentMethod = true
+                    }
+                }
+            )
+        }
+        .sheet(isPresented: $showPaymentMethod) {
+            PaymentMethodSelectionView(
+                isPresented: $showPaymentMethod,
+                amount: paymentAmount,
+                payeeName: "Receipt Items",
+                billSplitID: receipt.id.uuidString,
+                onPaymentComplete: { result in
+                    handlePaymentCompletion(for: selectedItemsForPayment, result: result)
                 }
             )
         }
@@ -362,66 +367,21 @@ struct ReadOnlySplitSummaryView: View {
         showItemSelection = true
     }
 
-    private func handlePayment(for selectedItems: Set<UUID>) {
-        // Calculate total for selected items
+    private func handlePaymentCompletion(for selectedItems: Set<UUID>, result: PaymentCompletionResult) {
+        // Handle payment completion after payment method selection
+        guard result.success else { return }
+
         let youParticipant = localConfig.participants.first(where: { $0.name == "You" })
         guard let youId = youParticipant?.id else { return }
 
-        var totalAmount: Double = 0.0
-
-        for itemId in selectedItems {
-            if let item = receipt.items.first(where: { $0.id == itemId }) {
-                if let assignment = localConfig.itemAssignments.first(where: { $0.itemId == itemId }) {
-                    // Calculate amount based on split type
-                    let participantCount = Double(assignment.participants.count)
-                    let itemAmount: Double
-
-                    switch assignment.splitType {
-                    case .equal:
-                        itemAmount = item.totalPrice / participantCount
-                    case .percentage:
-                        let percentage = assignment.customSplits[youId] ?? 0
-                        itemAmount = item.totalPrice * (percentage / 100.0)
-                    case .custom:
-                        itemAmount = assignment.customSplits[youId] ?? 0
-                    }
-
-                    totalAmount += itemAmount
-                }
-            }
-        }
-
-        // Check if wallet has sufficient balance
-        let currentBalance = walletManager.walletBalance
-
-        if currentBalance >= totalAmount {
-            // Sufficient funds - deduct from wallet and mark as paid
-            walletManager.deductFromWallet(amount: totalAmount)
-
-            // Mark participant as paid locally
-            if !localConfig.paidParticipants.contains(youId) {
-                localConfig.paidParticipants.append(youId)
-            }
-            localConfig.updatedAt = Date()
-        } else {
-            // Insufficient funds - show alert
-            insufficientAmount = totalAmount
-            showInsufficientFundsAlert = true
-        }
-    }
-
-    private func handlePaymentCompletion(for participant: SplitSummary, result: PaymentCompletionResult) {
-        // Simulate payment completion without saving to database
-        guard result.success else { return }
-
-        // Deduct amount from wallet
-        walletManager.deductFromWallet(amount: participant.total)
-
         // Mark participant as paid locally
-        if !localConfig.paidParticipants.contains(participant.participant.id) {
-            localConfig.paidParticipants.append(participant.participant.id)
+        if !localConfig.paidParticipants.contains(youId) {
+            localConfig.paidParticipants.append(youId)
         }
         localConfig.updatedAt = Date()
+
+        // Refresh wallet data
+        walletManager.refresh()
     }
 }
 
