@@ -20,9 +20,14 @@ struct ReadOnlySplitSummaryView: View {
     @State private var insufficientAmount: Double = 0.0
     @State private var showAddFunds = false
     @State private var showItemSelection = false
-    @State private var showPaymentMethod = false
+    @State private var paymentData: PaymentData?
     @State private var selectedItemsForPayment: Set<UUID> = []
-    @State private var paymentAmount: Double = 0.0
+
+    struct PaymentData: Identifiable {
+        let id = UUID()
+        let amount: Double
+        let selectedItems: Set<UUID>
+    }
 
     init(receipt: Receipt, configuration: SplitConfiguration) {
         self.receipt = receipt
@@ -89,23 +94,25 @@ struct ReadOnlySplitSummaryView: View {
                 configuration: localConfig,
                 onConfirm: { selectedItems, amount in
                     selectedItemsForPayment = selectedItems
-                    paymentAmount = amount
                     showItemSelection = false
                     // Small delay to allow sheet dismissal animation
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        showPaymentMethod = true
+                        paymentData = PaymentData(amount: amount, selectedItems: selectedItems)
                     }
                 }
             )
         }
-        .sheet(isPresented: $showPaymentMethod) {
+        .sheet(item: $paymentData) { data in
             PaymentMethodSelectionView(
-                isPresented: $showPaymentMethod,
-                amount: paymentAmount,
+                isPresented: Binding(
+                    get: { paymentData != nil },
+                    set: { if !$0 { paymentData = nil } }
+                ),
+                amount: data.amount,
                 payeeName: "Receipt Items",
                 billSplitID: receipt.id.uuidString,
                 onPaymentComplete: { result in
-                    handlePaymentCompletion(for: selectedItemsForPayment, result: result)
+                    handlePaymentCompletion(for: data.selectedItems, result: result)
                 }
             )
         }
