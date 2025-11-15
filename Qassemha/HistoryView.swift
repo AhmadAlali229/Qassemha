@@ -50,13 +50,45 @@ struct HistoryView: View {
             // Add receipts
             DispatchQueue.main.sync {
                 for receipt in receipts {
+                    // Skip receipts that haven't been fully scanned yet
+                    // A receipt is considered "not scanned" if:
+                    // - It has no items
+                    // - Store name is empty or nil
+                    // - Total is zero or negative
+                    let hasItems = (receipt.items?.count ?? 0) > 0
+                    let hasStoreName = !(receipt.storeName?.isEmpty ?? true)
+                    let hasValidTotal = receipt.total > 0
+
+                    if !hasItems || !hasStoreName || !hasValidTotal {
+                        continue  // Skip incomplete/unscanned receipts
+                    }
+
+                    // Determine actual status based on receipt type and payment status
+                    let status: String
+                    if receipt.receiptType == "sent" {
+                        // Sent receipts are always completed (you've already paid)
+                        status = "completed"
+                    } else if receipt.receiptType == "received" {
+                        // Only show received receipts that are actually pending (not paid yet)
+                        // Skip this receipt if it has no split configuration (not a pending payment)
+                        let receiptID = receipt.receiptID ?? UUID()
+                        let hasSplit = BillSplitManager.shared.getConfiguration(for: receiptID) != nil
+                        if !hasSplit {
+                            continue  // Skip receipts without splits
+                        }
+                        status = "pending"
+                    } else {
+                        // Default case for other receipt types
+                        status = "completed"
+                    }
+
                     transactions.append(UnifiedTransaction(
                         id: receipt.receiptID ?? UUID(),
                         title: receipt.storeName ?? "Unknown Store",
                         date: receipt.date ?? Date(),
                         total: receipt.total,
                         currency: receipt.currency ?? "SAR",
-                        status: receipt.receiptType == "sent" ? "completed" : "pending",
+                        status: status,
                         type: .receipt,
                         paymentMethod: nil,
                         category: receipt.category ?? "general",
@@ -480,7 +512,7 @@ struct AnalyticsSummaryCard: View {
     @ObservedObject private var currencyManager = CurrencyManager.shared
 
     private var totalSpent: Double {
-        transactions.filter { $0.type == .receipt || $0.category == "payment" }.reduce(0) { $0 + $1.total }
+        transactions.filter { ($0.type == .receipt || $0.category == "payment") && $0.status == "completed" }.reduce(0) { $0 + $1.total }
     }
 
     private var totalReceived: Double {
@@ -793,7 +825,7 @@ struct TransactionReportsView: View {
     }
 
     private var totalSpent: Double {
-        periodTransactions.filter { $0.type == .receipt || $0.category == "payment" }.reduce(0) { $0 + $1.total }
+        periodTransactions.filter { ($0.type == .receipt || $0.category == "payment") && $0.status == "completed" }.reduce(0) { $0 + $1.total }
     }
 
     private var totalReceived: Double {
@@ -951,43 +983,72 @@ struct TransactionReportsView: View {
                     .padding(.horizontal)
 
                     // Spending Trends
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("Spending Trends")
-                            .font(.system(size: 20, weight: .bold))
-                            .foregroundColor(.primary)
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Spending Trends")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundColor(.primary)
 
-                        Text("Daily average: \(currencyManager.format(amount: totalSpent / Double(max(Calendar.current.dateComponents([.day], from: periodTransactions.last?.date ?? Date(), to: Date()).day ?? 1, 1))))")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.secondary)
+                                Text("Daily avg: \(currencyManager.format(amount: totalSpent / Double(max(Calendar.current.dateComponents([.day], from: periodTransactions.last?.date ?? Date(), to: Date()).day ?? 1, 1))))")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+                        }
 
                         if totalSpent > 0 {
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(spacing: 16) {
                                 ForEach(getWeeklyBreakdown(), id: \.week) { item in
-                                    HStack {
-                                        Text(item.week)
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.secondary)
-                                            .frame(width: 80, alignment: .leading)
+                                    VStack(spacing: 8) {
+                                        HStack {
+                                            Text(item.week)
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundColor(.primary)
 
-                                        GeometryReader { geometry in
-                                            RoundedRectangle(cornerRadius: 4)
-                                                .fill(Color.blue.opacity(0.7))
-                                                .frame(width: geometry.size.width * CGFloat(item.amount / totalSpent))
+                                            Spacer()
+
+                                            Text(currencyManager.format(amount: item.amount))
+                                                .font(.system(size: 14, weight: .bold))
+                                                .foregroundColor(.blue)
                                         }
-                                        .frame(height: 20)
 
-                                        Text(currencyManager.format(amount: item.amount))
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundColor(.primary)
-                                            .frame(width: 80, alignment: .trailing)
+                                        ZStack(alignment: .leading) {
+                                            // Background bar
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .fill(Color.blue.opacity(0.12))
+                                                .frame(height: 24)
+
+                                            // Progress bar
+                                            RoundedRectangle(cornerRadius: 6)
+                                                .fill(
+                                                    LinearGradient(
+                                                        gradient: Gradient(colors: [Color.blue, Color.blue.opacity(0.7)]),
+                                                        startPoint: .leading,
+                                                        endPoint: .trailing
+                                                    )
+                                                )
+                                                .frame(height: 24)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .scaleEffect(x: min(1.0, CGFloat(item.amount / totalSpent)), y: 1, anchor: .leading)
+
+                                            // Percentage label
+                                            Text("\(Int(min(100, (item.amount / totalSpent) * 100)))%")
+                                                .font(.system(size: 11, weight: .bold))
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 8)
+                                                .opacity(item.amount / totalSpent > 0.15 ? 1 : 0)
+                                        }
                                     }
+                                    .padding(.vertical, 4)
                                 }
                             }
-                            .padding()
+                            .padding(16)
                             .background(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: 16)
                                     .fill(Color(.systemBackground))
-                                    .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                                    .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
                             )
                         }
                     }

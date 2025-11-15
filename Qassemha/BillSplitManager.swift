@@ -99,10 +99,15 @@ class BillSplitManager: ObservableObject {
             participantTotals[participant.id] = (subtotal: 0, items: [])
         }
 
+        // Track which items have been assigned
+        var assignedItemIds = Set<UUID>()
+
         // Calculate subtotal per participant based on item assignments
         for assignment in config.itemAssignments {
             guard let item = receipt.items.first(where: { $0.id == assignment.itemId }),
                   !assignment.participants.isEmpty else { continue }
+
+            assignedItemIds.insert(item.id)
 
             switch assignment.splitType {
             case .equal:
@@ -143,9 +148,25 @@ class BillSplitManager: ObservableObject {
             }
         }
 
+        // Handle items without assignments - divide equally among all participants
+        let unassignedItems = receipt.items.filter { !assignedItemIds.contains($0.id) }
+        if !unassignedItems.isEmpty && !config.participants.isEmpty {
+            let participantCount = Double(config.participants.count)
+            for item in unassignedItems {
+                let amountPerPerson = item.totalPrice / participantCount
+                for participantId in participantTotals.keys {
+                    if var current = participantTotals[participantId] {
+                        current.subtotal += amountPerPerson
+                        current.items.append(item.id)
+                        participantTotals[participantId] = current
+                    }
+                }
+            }
+        }
+
         // Calculate tax and tip distribution
         return participantTotals.map { participantId, data in
-            let proportionalFactor = data.subtotal / receipt.subtotal
+            let proportionalFactor = receipt.subtotal > 0 ? data.subtotal / receipt.subtotal : 0
 
             let taxAmount = config.includeTax ? receipt.tax * proportionalFactor : 0
             let tipAmount = config.includeTip ? receipt.tip * proportionalFactor : 0
@@ -259,6 +280,7 @@ class BillSplitManager: ObservableObject {
             let assignedItems = receipt.items.filter { split.itemsAssigned.contains($0.id) }
             let isPaid = config.paidParticipants.contains(participant.id)
 
+            // Use the calculated split amounts from ParticipantSplit
             return SplitSummary(
                 participant: participant,
                 itemsCount: assignedItems.count,
@@ -358,24 +380,68 @@ class BillSplitManager: ObservableObject {
     func calculateTotalPendingPayments() -> Double {
         let coreDataManager = CoreDataManager.shared
         let allReceipts = coreDataManager.getSavedReceipts()
+        let currentUserPhone = AuthenticationManager.shared.currentUserPhoneNumber
+        let currentUserEmail = AuthenticationManager.shared.currentUserEmail
         var totalPending: Double = 0.0
+
+        print("🔍 Calculating pending payments...")
+        print("   Total split configurations: \(splitConfigurations.count)")
+        print("   Total receipts in database: \(allReceipts.count)")
+        print("   Current user phone: \(currentUserPhone ?? "nil")")
+        print("   Current user email: \(currentUserEmail ?? "nil")")
 
         // Get all receipts that have split configurations
         for (receiptId, config) in splitConfigurations {
+            print("\n   📋 Checking receipt ID: \(receiptId)")
+
             // Try to find the receipt
             if let receipt = allReceipts.first(where: { $0.id == receiptId }) {
-                // Generate summaries for this receipt
-                let summaries = generateSplitSummaries(receipt: receipt, config: config)
+                print("   ✓ Found receipt: \(receipt.storeName), type: \(receipt.receiptType)")
 
-                // Sum up unpaid amounts
-                for summary in summaries {
-                    if !summary.isPaid {
-                        totalPending += summary.total
+                // Only count SENT receipts (receipts you scanned/paid for)
+                // This shows what OTHERS owe YOU
+                if receipt.receiptType == .sent {
+                    print("   ✓ Is SENT receipt - processing...")
+
+                    // Check if user is admin (the one who paid)
+                    let isAdmin = config.adminId != nil
+                    print("   Admin ID: \(config.adminId?.uuidString ?? "nil")")
+
+                    // Generate summaries for this receipt
+                    let summaries = generateSplitSummaries(receipt: receipt, config: config)
+                    print("   Generated \(summaries.count) summaries")
+
+                    // Count what OTHERS owe YOU (unpaid amounts from other participants)
+                    for summary in summaries {
+                        // Determine if this is the current user by multiple methods
+                        let phoneMatch = currentUserPhone != nil && summary.participant.phoneNumber == currentUserPhone
+                        let nameMatch = summary.participant.name.lowercased() == "you"
+                        let isAdminUser = config.adminId == summary.participant.id
+                        let isCurrentUser = phoneMatch || nameMatch || isAdminUser
+
+                        print("   - \(summary.participant.name) (ID: \(summary.participant.id.uuidString.prefix(8)))")
+                        print("     Amount: \(summary.total), isPaid: \(summary.isPaid)")
+                        print("     phoneMatch: \(phoneMatch), nameMatch: \(nameMatch), isAdminUser: \(isAdminUser)")
+                        print("     isCurrentUser: \(isCurrentUser)")
+
+                        if !summary.isPaid && !isCurrentUser {
+                            totalPending += summary.total
+                            print("     ✓ Added to pending: \(summary.total)")
+                        } else if !summary.isPaid && isCurrentUser {
+                            print("     ✗ Not added (is current user)")
+                        } else if summary.isPaid {
+                            print("     ✗ Not added (already paid)")
+                        }
                     }
+                } else {
+                    print("   ✗ Not a SENT receipt (type: \(receipt.receiptType)), skipping")
                 }
+            } else {
+                print("   ✗ Receipt not found in database")
             }
         }
 
+        print("\n💰 Total pending: \(totalPending)")
         return totalPending
     }
 

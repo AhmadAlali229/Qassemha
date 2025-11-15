@@ -365,24 +365,8 @@ struct BillSplitView: View {
                         equalSplitOptions
 
                     case .individual:
-                        Button(action: {
-                            showingItemAssignment = true
-                        }) {
-                            HStack {
-                                Image(systemName: "list.bullet.rectangle")
-                                    .font(.system(size: 18, weight: .medium))
-
-                                Text("Assign Items to People")
-                                    .font(.system(size: 16, weight: .semibold))
-                            }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.blue)
-                            )
-                        }
+                        // "Assign Items to People" button hidden per user request
+                        EmptyView()
 
                     case .percentage, .custom:
                         Button(action: {
@@ -473,7 +457,8 @@ struct BillSplitView: View {
 
     private var summaryPreviewSection: some View {
         Group {
-            if !configuration.participants.isEmpty {
+            // Hide Quick Preview for "By Item" split type
+            if !configuration.participants.isEmpty && configuration.splitType != .individual {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Quick Preview")
                         .font(.system(size: 18, weight: .semibold))

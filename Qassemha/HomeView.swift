@@ -231,7 +231,7 @@ struct HomeView: View {
             participants: [chris, sam, taylor, you4],
             includeTax: true,
             includeTip: false,
-            paidParticipants: [you4.id, chris.id, sam.id],  // You, Chris, and Sam have paid
+            paidParticipants: [chris.id, sam.id, taylor.id],  // Chris, Sam, and Taylor have paid
             adminId: you4.id  // You created this bill
         )
 
@@ -261,6 +261,27 @@ struct HomeView: View {
                 participants: [taylor.id],
                 splitType: .equal
             )
+        ]
+
+        // Set which items each paid participant has paid for
+        config2.paidItems = [
+            // Chris paid for 2 items: Movie ticket + Popcorn = $20.50
+            chris.id: [
+                UUID(uuidString: "30000000-0000-0000-0000-000000000005")!,  // Movie Ticket ($12.50)
+                UUID(uuidString: "30000000-0000-0000-0000-000000000006")!   // Popcorn ($8.00)
+            ],
+            // Sam paid for 3 items: Movie ticket + Popcorn + Soda = $26.00
+            sam.id: [
+                UUID(uuidString: "30000000-0000-0000-0000-000000000005")!,  // Movie Ticket ($12.50)
+                UUID(uuidString: "30000000-0000-0000-0000-000000000006")!,  // Popcorn ($8.00)
+                UUID(uuidString: "30000000-0000-0000-0000-000000000007")!   // Soda ($5.50)
+            ],
+            // Taylor paid for all items: Movie ticket + Soda + Nachos = $24.50
+            taylor.id: [
+                UUID(uuidString: "30000000-0000-0000-0000-000000000005")!,  // Movie Ticket ($12.50)
+                UUID(uuidString: "30000000-0000-0000-0000-000000000007")!,  // Soda ($5.50)
+                UUID(uuidString: "30000000-0000-0000-0000-000000000008")!   // Nachos ($6.50)
+            ]
         ]
 
         return [
@@ -573,6 +594,7 @@ struct HomeView: View {
             }
             .onAppear {
                 isAnimating = true
+                cleanupExampleReceipts()
                 loadRecentActivity()
                 walletManager.createExampleWalletEntries()
                 walletManager.refresh()
@@ -633,6 +655,41 @@ struct HomeView: View {
         .sorted { $0.config.updatedAt > $1.config.updatedAt }
         .prefix(10)
         .map { $0 }
+    }
+
+    private func cleanupExampleReceipts() {
+        // Clean up any previously seeded example receipts (only run once)
+        if UserDefaults.standard.bool(forKey: "hasCleanedExampleSentReceipts") {
+            return
+        }
+
+        print("🧹 Cleaning up example sent receipts...")
+
+        // Example receipt IDs that should not be in the database
+        let exampleReceiptIDs = [
+            UUID(uuidString: "00000000-0000-0000-0000-000000000003")!, // Bella Italia
+            UUID(uuidString: "00000000-0000-0000-0000-000000000004")!  // CineMax Theater
+        ]
+
+        let allReceipts = CoreDataManager.shared.getSavedReceipts()
+
+        for receiptID in exampleReceiptIDs {
+            // Find the receipt in database
+            if let receipt = allReceipts.first(where: { $0.id == receiptID }) {
+                // Delete receipt from database
+                CoreDataManager.shared.deleteReceipt(receipt)
+                print("🗑️ Deleted example receipt from database: \(receipt.storeName)")
+            }
+
+            // Delete split configuration
+            billSplitManager.deleteConfiguration(for: receiptID)
+            print("🗑️ Deleted split configuration for: \(receiptID)")
+        }
+
+        // Mark cleanup as done
+        UserDefaults.standard.set(true, forKey: "hasCleanedExampleSentReceipts")
+        UserDefaults.standard.removeObject(forKey: "hasSeededExampleSentReceipts")
+        print("✅ Example receipts cleanup complete")
     }
 }
 

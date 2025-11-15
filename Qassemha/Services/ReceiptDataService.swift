@@ -14,35 +14,70 @@ class ReceiptDataService {
 
     private init() {}
 
-    // MARK: - Seed Hardcoded QR Receipts
+    // MARK: - Seed Hardcoded QR Receipts (DEPRECATED - Now using on-demand creation)
 
     func seedHardcodedQRReceipts() {
-        // Check if already seeded
-        if UserDefaults.standard.bool(forKey: "hasSeededQRReceipts") {
-            print("✅ QR Receipts already seeded")
+        // DEPRECATED: This function is no longer used
+        // Receipts are now created on-demand when QR codes are scanned
+        print("⚠️ seedHardcodedQRReceipts is deprecated - receipts are now created on-demand")
+    }
+
+    // MARK: - Clean Up Previously Seeded Receipts
+
+    func cleanupSeededReceipts() {
+        // Only run cleanup once
+        if UserDefaults.standard.bool(forKey: "hasCleanedSeededReceipts") {
             return
         }
 
-        print("🌱 Seeding hardcoded QR receipts...")
+        print("🧹 Starting cleanup of seeded receipts...")
 
-        // Seed Taqwarma House receipt
-        let taqwarmaQR = "ARZTaGF3YXJtYSBIb3VzZSBDb21wYW55Ag8zMTA0NjQ5MDEyMDAwMDMDFDIwMjUtMTAtMDUgMTU6Mzk6MjFaBAYxNjcuMDAFBTIxLjc4"
-        let taqwarmaReceipt = createTaqwarmaHouseReceipt()
-        saveReceiptWithQR(receipt: taqwarmaReceipt, qrCode: taqwarmaQR)
+        // Remove the seeded receipts that were created before on-demand approach
+        let receiptNumbers = ["310464901200003", "300705521800003"]
 
-        // Seed Taqatu Hamam receipt
-        let taqatuHamamQR = "ATzZhdit2YQg2KrZgtin2LfZiti5INmI2K3Zhdin2YUg2YTZhNiq2KzYp9ix2YcgLSDYp9mE2YHYsdi5IDMCDzMwMDcwNTUyMTgwMDAwMwMUMjAyNS0wOS0zMFQyMDowNDowNVoEAzE1OAUFMjAuNjI="
-        let taqatuHamamReceipt = createTaqatuHamamReceipt()
-        saveReceiptWithQR(receipt: taqatuHamamReceipt, qrCode: taqatuHamamQR)
+        for receiptNumber in receiptNumbers {
+            // Delete StoredReceipt
+            let receiptFetchRequest: NSFetchRequest<StoredReceipt> = StoredReceipt.fetchRequest()
+            receiptFetchRequest.predicate = NSPredicate(format: "receiptNumber == %@", receiptNumber)
 
-        // Mark as seeded
-        UserDefaults.standard.set(true, forKey: "hasSeededQRReceipts")
-        print("✅ Successfully seeded QR receipts")
+            do {
+                let receiptResults = try context.fetch(receiptFetchRequest)
+                for receipt in receiptResults {
+                    let receiptID = receipt.receiptID
+                    context.delete(receipt)
+                    print("🗑️ Deleted seeded receipt: \(receipt.storeName ?? "Unknown")")
+
+                    // Also delete associated QRCodeReceipt
+                    if let receiptID = receiptID {
+                        let qrFetchRequest: NSFetchRequest<QRCodeReceipt> = QRCodeReceipt.fetchRequest()
+                        qrFetchRequest.predicate = NSPredicate(format: "receipt.receiptID == %@", receiptID as CVarArg)
+
+                        let qrResults = try context.fetch(qrFetchRequest)
+                        for qrCode in qrResults {
+                            context.delete(qrCode)
+                            print("🗑️ Deleted associated QR code")
+                        }
+                    }
+                }
+
+                if !receiptResults.isEmpty {
+                    try context.save()
+                }
+            } catch {
+                print("❌ Error cleaning up seeded receipts: \(error)")
+            }
+        }
+
+        // Reset the seeding flag and mark cleanup as done
+        UserDefaults.standard.removeObject(forKey: "hasSeededQRReceipts")
+        UserDefaults.standard.set(true, forKey: "hasCleanedSeededReceipts")
+        print("✅ Cleanup complete - receipts will be created on-demand when scanned")
     }
 
     // MARK: - Fetch Receipt by QR Code
 
     func fetchReceipt(forQRCode qrCode: String) -> Receipt? {
+        // First check if it exists in database
         let fetchRequest: NSFetchRequest<QRCodeReceipt> = QRCodeReceipt.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "qrCodeString == %@", qrCode)
 
@@ -56,22 +91,56 @@ class ReceiptDataService {
             print("❌ Error fetching receipt for QR code: \(error)")
         }
 
-        return nil
+        // If not in database, check if it's one of our hardcoded QR codes
+        // and create it on-demand
+        return createReceiptForHardcodedQR(qrCode)
+    }
+
+    // MARK: - Create Receipt for Hardcoded QR (On-Demand)
+
+    private func createReceiptForHardcodedQR(_ qrCode: String) -> Receipt? {
+        let taqwarmaQR = "ARZTaGF3YXJtYSBIb3VzZSBDb21wYW55Ag8zMTA0NjQ5MDEyMDAwMDMDFDIwMjUtMTAtMDUgMTU6Mzk6MjFaBAYxNjcuMDAFBTIxLjc4"
+        let taqatuHamamQR = "ATzZhdit2YQg2KrZgtin2LfZiti5INmI2K3Zhdin2YUg2YTZhNiq2KzYp9ix2YcgLSDYp9mE2YHYsdi5IDMCDzMwMDcwNTUyMTgwMDAwMwMUMjAyNS0wOS0zMFQyMDowNDowNVoEAzE1OAUFMjAuNjI="
+
+        var receipt: Receipt?
+
+        if qrCode == taqwarmaQR {
+            receipt = createTaqwarmaHouseReceipt()
+            print("✅ Creating Taqwarma House receipt on-demand")
+        } else if qrCode == taqatuHamamQR {
+            receipt = createTaqatuHamamReceipt()
+            print("✅ Creating Taqatu Hamam receipt on-demand")
+        }
+
+        // Save the receipt to database now that it's been scanned
+        if let receipt = receipt {
+            saveReceiptWithQR(receipt: receipt, qrCode: qrCode)
+        }
+
+        return receipt
     }
 
     // MARK: - Check if QR Code Exists
 
     func qrCodeExists(_ qrCode: String) -> Bool {
+        // Check database first
         let fetchRequest: NSFetchRequest<QRCodeReceipt> = QRCodeReceipt.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "qrCodeString == %@", qrCode)
 
         do {
             let count = try context.count(for: fetchRequest)
-            return count > 0
+            if count > 0 {
+                return true
+            }
         } catch {
             print("❌ Error checking QR code existence: \(error)")
-            return false
         }
+
+        // Check if it's a hardcoded QR code
+        let taqwarmaQR = "ARZTaGF3YXJtYSBIb3VzZSBDb21wYW55Ag8zMTA0NjQ5MDEyMDAwMDMDFDIwMjUtMTAtMDUgMTU6Mzk6MjFaBAYxNjcuMDAFBTIxLjc4"
+        let taqatuHamamQR = "ATzZhdit2YQg2KrZgtin2LfZiti5INmI2K3Zhdin2YUg2YTZhNiq2KzYp9ix2YcgLSDYp9mE2YHYsdi5IDMCDzMwMDcwNTUyMTgwMDAwMwMUMjAyNS0wOS0zMFQyMDowNDowNVoEAzE1OAUFMjAuNjI="
+
+        return qrCode == taqwarmaQR || qrCode == taqatuHamamQR
     }
 
     // MARK: - Save Receipt with QR Code
@@ -261,7 +330,7 @@ class ReceiptDataService {
             imageData: nil,
             scanType: .qrCode,
             category: .food,
-            receiptType: .received
+            receiptType: .sent
         )
 
         return receipt
@@ -371,7 +440,7 @@ class ReceiptDataService {
             imageData: nil,
             scanType: .qrCode,
             category: .groceries,
-            receiptType: .received
+            receiptType: .sent
         )
 
         return receipt

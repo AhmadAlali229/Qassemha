@@ -16,6 +16,11 @@ struct ItemAssignmentView: View {
 
     @State private var selectedItem: ReceiptItem?
 
+    // Filter to show only "You" participant for by item splits
+    var availableParticipants: [Participant] {
+        configuration.participants.filter { $0.name == "You" }
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -111,7 +116,7 @@ struct ItemAssignmentView: View {
                     ItemAssignmentRow(
                         item: item,
                         assignment: getAssignment(for: item),
-                        participants: configuration.participants,
+                        participants: availableParticipants,
                         onTap: {
                             selectedItem = item
                         },
@@ -139,7 +144,7 @@ struct ItemAssignmentView: View {
                 .foregroundColor(.primary)
 
             VStack(spacing: 12) {
-                ForEach(configuration.participants) { participant in
+                ForEach(availableParticipants) { participant in
                     ParticipantAssignmentSummary(
                         participant: participant,
                         items: getAssignedItems(for: participant),
@@ -352,26 +357,28 @@ struct ItemAssignmentRow: View {
                                 )
                             }
 
-                            // Add more button
-                            Button(action: onTap) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "plus.circle.fill")
-                                        .font(.system(size: 16, weight: .medium))
+                            // Add more button - only show if there are unassigned participants
+                            if assignedParticipants.count < participants.count {
+                                Button(action: onTap) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.system(size: 16, weight: .medium))
 
-                                    Text("Add")
-                                        .font(.system(size: 13, weight: .medium))
+                                        Text("Add")
+                                            .font(.system(size: 13, weight: .medium))
+                                    }
+                                    .foregroundColor(.blue)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 16)
+                                            .stroke(.blue, lineWidth: 1.5)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 16)
+                                                    .fill(Color.blue.opacity(0.05))
+                                            )
+                                    )
                                 }
-                                .foregroundColor(.blue)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(.blue, lineWidth: 1.5)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .fill(Color.blue.opacity(0.05))
-                                        )
-                                )
                             }
                         }
                     }

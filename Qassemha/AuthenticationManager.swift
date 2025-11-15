@@ -32,6 +32,14 @@ class AuthenticationManager: ObservableObject {
         currentUserEmail = userDefaults.string(forKey: userEmailKey)
         currentUserName = userDefaults.string(forKey: userNameKey)
         currentUserPhoneNumber = userDefaults.string(forKey: userPhoneKey)
+
+        // Initialize wallet with example transactions if authenticated
+        if isAuthenticated {
+            DispatchQueue.main.async {
+                WalletManager.shared.createExampleWalletEntries()
+                WalletManager.shared.refresh()
+            }
+        }
     }
 
     func login(email: String, name: String? = nil) {
@@ -45,6 +53,10 @@ class AuthenticationManager: ObservableObject {
             self.isAuthenticated = true
             self.currentUserEmail = email
             self.currentUserName = name
+
+            // Initialize wallet with example transactions for new users
+            WalletManager.shared.createExampleWalletEntries()
+            WalletManager.shared.refresh()
         }
     }
 

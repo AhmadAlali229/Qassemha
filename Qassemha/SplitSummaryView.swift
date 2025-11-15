@@ -22,6 +22,8 @@ struct SplitSummaryView: View {
     @State private var showingEditSplit = false
     @State private var participantToPay: SplitSummary?
     @State private var showingDueDatePicker = false
+    @State private var showingItemSelectionForPaid = false
+    @State private var participantForItemSelection: Participant?
     @StateObject private var notificationManager = NotificationManager.shared
 
     var summaries: [SplitSummary] {
@@ -127,6 +129,18 @@ struct SplitSummaryView: View {
         }
         .fullScreenCover(isPresented: $showingEditSplit) {
             BillSplitView(receipt: receipt)
+        }
+        .sheet(isPresented: $showingItemSelectionForPaid) {
+            if let participant = participantForItemSelection {
+                SelectItemsForMarkAsPaidView(
+                    receipt: receipt,
+                    configuration: configuration,
+                    participant: participant,
+                    onConfirm: { selectedItems in
+                        handleItemSelectionForPaid(participantId: participant.id, selectedItems: selectedItems)
+                    }
+                )
+            }
         }
         .alert("Reset Bill Split", isPresented: $showingResetConfirmation) {
             Button("Cancel", role: .cancel) { }
@@ -388,8 +402,9 @@ struct SplitSummaryView: View {
     private var paymentOverviewCard: some View {
         let paidCount = summaries.filter { $0.isPaid }.count
         let totalCount = summaries.count
-        let paidAmount = summaries.filter { $0.isPaid }.reduce(0.0) { $0 + $1.total }
-        let totalAmount = receipt.total
+
+        // Special calculation for sent receipts with "By Item" split
+        let (paidAmount, totalAmount) = calculatePaymentAmounts()
 
         return HStack(spacing: 12) {
             // Paid Status
@@ -486,7 +501,6 @@ struct SplitSummaryView: View {
                         // For received receipts, only show Pay Now (no Mark as Paid toggle)
                         ReceivedReceiptParticipantCard(
                             summary: summary,
-                            currency: receipt.currency,
                             isAdmin: configuration.adminId == summary.participant.id,
                             onTap: {
                                 selectedSummary = summary
@@ -505,7 +519,14 @@ struct SplitSummaryView: View {
                                 selectedSummary = summary
                             },
                             onTogglePaid: {
-                                togglePaymentStatus(for: summary.participant.id)
+                                // For "By Item" splits, show item selection before marking as paid
+                                if configuration.splitType == .individual {
+                                    participantForItemSelection = summary.participant
+                                    showingItemSelectionForPaid = true
+                                } else {
+                                    // For other split types, toggle payment status directly
+                                    togglePaymentStatus(for: summary.participant.id)
+                                }
                             },
                             onPayNow: {
                                 participantToPay = summary
@@ -567,6 +588,14 @@ struct SplitSummaryView: View {
 
     // MARK: - Helper Methods
 
+    private func calculatePaymentAmounts() -> (paidAmount: Double, totalAmount: Double) {
+        // Sum what participants have actually paid (from their summaries)
+        let paidAmount = summaries.filter { $0.isPaid }.reduce(0.0) { $0 + $1.total }
+
+        // Always use full receipt total (even for "By Item" - pending shows remaining balance including tax)
+        return (paidAmount, receipt.total)
+    }
+
     private func resetSplit() {
         var resetConfig = SplitConfiguration(receiptId: receipt.id)
         manager.updateConfiguration(resetConfig)
@@ -580,6 +609,24 @@ struct SplitSummaryView: View {
 
     private func togglePaymentStatus(for participantId: UUID) {
         manager.togglePaymentStatus(participantId: participantId, config: &configuration)
+        manager.updateConfiguration(configuration)
+    }
+
+    private func handleItemSelectionForPaid(participantId: UUID, selectedItems: Set<UUID>) {
+        // Update paidItems with selected items
+        if selectedItems.isEmpty {
+            // If no items selected, mark as unpaid and remove from paidItems
+            configuration.paidItems.removeValue(forKey: participantId)
+            configuration.paidParticipants.removeAll { $0 == participantId }
+        } else {
+            // Update paid items for this participant
+            configuration.paidItems[participantId] = selectedItems
+            // Mark participant as paid
+            if !configuration.paidParticipants.contains(participantId) {
+                configuration.paidParticipants.append(participantId)
+            }
+        }
+        configuration.updatedAt = Date()
         manager.updateConfiguration(configuration)
     }
 

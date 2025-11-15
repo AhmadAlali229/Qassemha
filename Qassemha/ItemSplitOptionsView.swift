@@ -46,6 +46,11 @@ struct ItemSplitOptionsView: View {
         }
     }
 
+    // Filter to show only "You" participant for by item splits
+    var availableParticipants: [Participant] {
+        configuration.participants.filter { $0.name == "You" }
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -216,13 +221,13 @@ struct ItemSplitOptionsView: View {
 
                 Spacer()
 
-                Text("\(selectedParticipants.count)/\(configuration.participants.count)")
+                Text("\(selectedParticipants.count)/\(availableParticipants.count)")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.secondary)
             }
 
             VStack(spacing: 12) {
-                ForEach(configuration.participants) { participant in
+                ForEach(availableParticipants) { participant in
                     Button(action: {
                         toggleParticipant(participant.id)
                     }) {

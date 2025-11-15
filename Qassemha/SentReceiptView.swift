@@ -15,12 +15,14 @@ struct SentReceiptView: View {
     @StateObject private var manager = BillSplitManager.shared
     @StateObject private var walletManager = WalletManager.shared
     @StateObject private var authManager = AuthenticationManager.shared
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     @State private var selectedSummary: SplitSummary?
     @State private var showingResetConfirmation = false
     @State private var showingDeleteConfirmation = false
     @State private var showingEditSplit = false
     @State private var showingDueDatePicker = false
+    @State private var participantToMarkPaid: Participant?
     @StateObject private var notificationManager = NotificationManager.shared
 
     var summaries: [SplitSummary] {
@@ -110,6 +112,17 @@ struct SentReceiptView: View {
                 ParticipantDetailView(summary: summary, receipt: receipt)
             }
         }
+        .sheet(item: $participantToMarkPaid) { participant in
+            SelectItemsForMarkAsPaidView(
+                receipt: receipt,
+                configuration: configuration,
+                participant: participant,
+                onConfirm: { selectedItems in
+                    markItemsAsPaid(for: participant.id, items: selectedItems)
+                    participantToMarkPaid = nil
+                }
+            )
+        }
         .fullScreenCover(isPresented: $showingEditSplit) {
             BillSplitView(receipt: receipt)
         }
@@ -169,7 +182,7 @@ struct SentReceiptView: View {
                     Text("Subtotal")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("\(receipt.currency)\(receipt.subtotal, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.subtotal))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -180,7 +193,7 @@ struct SentReceiptView: View {
                     Text("Tax")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("\(receipt.currency)\(receipt.tax, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.tax))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -191,7 +204,7 @@ struct SentReceiptView: View {
                     Text("Tip")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("\(receipt.currency)\(receipt.tip, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.tip))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -202,7 +215,7 @@ struct SentReceiptView: View {
                     Text("Total")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("\(receipt.currency)\(receipt.total, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.total))
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.primary)
                 }
@@ -373,8 +386,74 @@ struct SentReceiptView: View {
     private var paymentOverviewCard: some View {
         let paidCount = summaries.filter { $0.isPaid }.count
         let totalCount = summaries.count
-        let paidAmount = summaries.filter { $0.isPaid }.reduce(0.0) { $0 + $1.total }
+
+        // Calculate paid amount based on split type
+        let paidAmount: Double
+        if configuration.splitType == .individual {
+            print("📤 [CALCULATION] By Item split - calculating based on paid items")
+            // For "By Item" splits, calculate based on paid items
+            paidAmount = summaries.filter { $0.isPaid }.reduce(0.0) { sum, summary in
+                print("📤   Processing participant: \(summary.participant.name)")
+                let paidItems = configuration.paidItems[summary.participant.id] ?? []
+                print("📤   Paid items count: \(paidItems.count)")
+                var participantPaidAmount: Double = 0.0
+
+                for itemId in paidItems {
+                    if let item = receipt.items.first(where: { $0.id == itemId }) {
+                        print("📤     Item: \(item.name), price: $\(String(format: "%.2f", item.totalPrice))")
+                        let itemAmount: Double
+
+                        if let assignment = configuration.itemAssignments.first(where: { $0.itemId == itemId }) {
+                            // Item has an assignment
+                            if assignment.participants.contains(summary.participant.id) {
+                                // Participant is assigned - use their specific share
+                                switch assignment.splitType {
+                                case .equal:
+                                    itemAmount = item.totalPrice / Double(assignment.participants.count)
+                                case .percentage:
+                                    let percentage = assignment.customSplits[summary.participant.id] ?? 0
+                                    itemAmount = item.totalPrice * (percentage / 100.0)
+                                case .custom:
+                                    itemAmount = assignment.customSplits[summary.participant.id] ?? 0
+                                }
+                            } else {
+                                // Participant not in assignment - use equal share based on assignment
+                                itemAmount = item.totalPrice / Double(assignment.participants.count)
+                            }
+                        } else {
+                            // No assignment - divide by all participants (default for sent receipts)
+                            let totalParticipants = configuration.participants.count
+                            itemAmount = totalParticipants > 0 ? item.totalPrice / Double(totalParticipants) : item.totalPrice
+                        }
+
+                        print("📤       -> Item amount: $\(String(format: "%.2f", itemAmount))")
+                        participantPaidAmount += itemAmount
+                    }
+                }
+
+                print("📤   Subtotal for participant: $\(String(format: "%.2f", participantPaidAmount))")
+
+                // For "By Item" sent receipts, don't add tax/tip to match individual participant display
+                // Tax/tip are NOT tracked at item level in this mode
+                print("📤   Total for participant (no tax/tip added): $\(String(format: "%.2f", participantPaidAmount))")
+                return sum + participantPaidAmount
+            }
+        } else {
+            // For other split types, use the summary total
+            paidAmount = summaries.filter { $0.isPaid }.reduce(0.0) { $0 + $1.total }
+        }
+
+        // Always use full receipt total (including tax/tip)
         let totalAmount = receipt.total
+
+        // Clamp pending amount to 0 minimum (cannot be negative)
+        let pendingAmount = max(0, totalAmount - paidAmount)
+
+        print("📤 [SENT RECEIPT] Paid count: \(paidCount)/\(totalCount)")
+        print("📤 [SENT RECEIPT] Split type: \(configuration.splitType)")
+        print("📤 [SENT RECEIPT] Paid amount: $\(String(format: "%.2f", paidAmount))")
+        print("📤 [SENT RECEIPT] Total amount: $\(String(format: "%.2f", totalAmount))")
+        print("📤 [SENT RECEIPT] Pending amount: $\(String(format: "%.2f", pendingAmount))")
 
         return HStack(spacing: 12) {
             // Paid Status
@@ -393,7 +472,7 @@ struct SentReceiptView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.primary)
 
-                Text("\(receipt.currency)\(paidAmount, specifier: "%.2f")")
+                Text(currencyManager.format(amount: paidAmount))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -426,7 +505,7 @@ struct SentReceiptView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.primary)
 
-                Text("\(receipt.currency)\(totalAmount - paidAmount, specifier: "%.2f")")
+                Text(currencyManager.format(amount: pendingAmount))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -451,7 +530,7 @@ struct SentReceiptView: View {
         VStack(alignment: .leading, spacing: 16) {
             // Header
             HStack {
-                Text("Who Owes What")
+                Text("Split Overview")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundColor(.primary)
 
@@ -467,7 +546,9 @@ struct SentReceiptView: View {
                 ForEach(summaries) { summary in
                     SentReceiptParticipantCard(
                         summary: summary,
-                        currency: receipt.currency,
+                        receipt: receipt,
+                        configuration: configuration,
+                        totalReceiptItems: receipt.items.count,
                         isAdmin: configuration.adminId == summary.participant.id,
                         onTap: {
                             selectedSummary = summary
@@ -549,21 +630,126 @@ struct SentReceiptView: View {
         // Find the participant
         guard let participant = configuration.participants.first(where: { $0.id == participantId }) else { return }
 
-        // Toggle the payment status
-        manager.togglePaymentStatus(participantId: participantId, config: &configuration)
+        // If marking as paid and split type is "By Item", show item selection
+        if wasUnpaid && configuration.splitType == .individual {
+            participantToMarkPaid = participant
+        } else if wasUnpaid {
+            // For other split types, mark as fully paid
+            configuration.paidParticipants.append(participantId)
+            configuration.updatedAt = Date()
+            manager.updateConfiguration(configuration)
+
+            // Reload configuration to trigger view refresh
+            if let updatedConfig = manager.getConfiguration(for: receipt.id) {
+                configuration = updatedConfig
+            }
+
+            // Record wallet entry if not "You" and not an example
+            if participant.name != "You" && !isExampleReceipt {
+                if let summary = summaries.first(where: { $0.participant.id == participantId }) {
+                    walletManager.recordReceivedPayment(
+                        from: participant.name,
+                        amount: summary.total,
+                        storeName: receipt.storeName,
+                        receiptId: receipt.id
+                    )
+                }
+            }
+        } else {
+            // Mark as unpaid
+            if let index = configuration.paidParticipants.firstIndex(of: participantId) {
+                configuration.paidParticipants.remove(at: index)
+            }
+            // Also remove all paid items for this participant
+            configuration.paidItems.removeValue(forKey: participantId)
+            configuration.updatedAt = Date()
+            manager.updateConfiguration(configuration)
+
+            // Reload configuration to trigger view refresh
+            if let updatedConfig = manager.getConfiguration(for: receipt.id) {
+                configuration = updatedConfig
+            }
+        }
+    }
+
+    private func markItemsAsPaid(for participantId: UUID, items: Set<UUID>) {
+        // Find the participant
+        guard let participant = configuration.participants.first(where: { $0.id == participantId }) else { return }
+
+        // Update paid items
+        configuration.paidItems[participantId] = items
+
+        // Mark as paid if at least one item is paid
+        if !items.isEmpty {
+            if !configuration.paidParticipants.contains(participantId) {
+                configuration.paidParticipants.append(participantId)
+            }
+        } else {
+            // Remove from paid if no items are paid
+            if let index = configuration.paidParticipants.firstIndex(of: participantId) {
+                configuration.paidParticipants.remove(at: index)
+            }
+        }
+
+        configuration.updatedAt = Date()
         manager.updateConfiguration(configuration)
 
-        // If marking as paid (not "You") and not an example, record wallet entry
-        if wasUnpaid && participant.name != "You" && !isExampleReceipt {
-            // Find the summary to get the amount
-            if let summary = summaries.first(where: { $0.participant.id == participantId }) {
-                walletManager.recordReceivedPayment(
-                    from: participant.name,
-                    amount: summary.total,
-                    storeName: receipt.storeName,
-                    receiptId: receipt.id
-                )
+        // Reload configuration to trigger view refresh
+        if let updatedConfig = manager.getConfiguration(for: receipt.id) {
+            configuration = updatedConfig
+        }
+
+        // Calculate the amount for the paid items
+        var paidAmount: Double = 0.0
+        for itemId in items {
+            if let item = receipt.items.first(where: { $0.id == itemId }) {
+                let itemAmount: Double
+
+                if let assignment = configuration.itemAssignments.first(where: { $0.itemId == itemId }) {
+                    // Item has an assignment
+                    if assignment.participants.contains(participantId) {
+                        // Participant is assigned - use their specific share
+                        switch assignment.splitType {
+                        case .equal:
+                            itemAmount = item.totalPrice / Double(assignment.participants.count)
+                        case .percentage:
+                            let percentage = assignment.customSplits[participantId] ?? 0
+                            itemAmount = item.totalPrice * (percentage / 100.0)
+                        case .custom:
+                            itemAmount = assignment.customSplits[participantId] ?? 0
+                        }
+                    } else {
+                        // Participant not in assignment - use equal share based on assignment
+                        itemAmount = item.totalPrice / Double(assignment.participants.count)
+                    }
+                } else {
+                    // No assignment - divide by all participants (default for sent receipts)
+                    let totalParticipants = configuration.participants.count
+                    itemAmount = totalParticipants > 0 ? item.totalPrice / Double(totalParticipants) : item.totalPrice
+                }
+
+                paidAmount += itemAmount
             }
+        }
+
+        // Add proportional tax and tip
+        if paidAmount > 0 && receipt.subtotal > 0 {
+            let proportionalFactor = paidAmount / receipt.subtotal
+            if proportionalFactor.isFinite {
+                let taxAmount = configuration.includeTax ? receipt.tax * proportionalFactor : 0
+                let tipAmount = configuration.includeTip ? receipt.tip * proportionalFactor : 0
+                paidAmount += taxAmount + tipAmount
+            }
+        }
+
+        // Record wallet entry if not "You" and not an example and items are not empty
+        if !items.isEmpty && participant.name != "You" && !isExampleReceipt {
+            walletManager.recordReceivedPayment(
+                from: participant.name,
+                amount: paidAmount,
+                storeName: receipt.storeName,
+                receiptId: receipt.id
+            )
         }
     }
 
@@ -621,10 +807,77 @@ struct SentReceiptView: View {
 
 struct SentReceiptParticipantCard: View {
     let summary: SplitSummary
-    let currency: String
+    let receipt: Receipt
+    let configuration: SplitConfiguration
+    let totalReceiptItems: Int
     let isAdmin: Bool
     let onTap: () -> Void
     let onTogglePaid: () -> Void
+    @ObservedObject private var currencyManager = CurrencyManager.shared
+
+    private func getReceiptItemCount() -> Int {
+        return totalReceiptItems
+    }
+
+    // Calculate the amount paid based on selected items for "By Item" splits
+    private func calculatePaidAmount() -> Double {
+        guard configuration.splitType == .individual else {
+            return summary.total
+        }
+
+        let paidItems = configuration.paidItems[summary.participant.id] ?? []
+        guard !paidItems.isEmpty else {
+            return 0.0
+        }
+
+        // Calculate the ratio of paid items to total assigned items
+        let totalAssignedItems = Set(summary.items.map { $0.id })
+        let paidItemsSet = paidItems.intersection(totalAssignedItems)
+
+        guard !totalAssignedItems.isEmpty else {
+            return 0.0
+        }
+
+        // If all assigned items are paid, return the full summary total
+        if paidItemsSet.count == totalAssignedItems.count {
+            return summary.total
+        }
+
+        // Calculate proportional amount based on paid items
+        var paidSubtotal: Double = 0.0
+
+        for itemId in paidItemsSet {
+            if let summaryItem = summary.items.first(where: { $0.id == itemId }),
+               let assignment = configuration.itemAssignments.first(where: { $0.itemId == itemId }) {
+
+                // Calculate this participant's share of the item
+                if assignment.participants.contains(summary.participant.id) {
+                    switch assignment.splitType {
+                    case .equal:
+                        paidSubtotal += summaryItem.totalPrice / Double(assignment.participants.count)
+                    case .percentage:
+                        let percentage = assignment.customSplits[summary.participant.id] ?? 0
+                        paidSubtotal += summaryItem.totalPrice * (percentage / 100.0)
+                    case .custom:
+                        paidSubtotal += assignment.customSplits[summary.participant.id] ?? 0
+                    }
+                } else {
+                    // Not assigned but can still pay - use equal share
+                    paidSubtotal += summaryItem.totalPrice / Double(assignment.participants.count)
+                }
+            }
+        }
+
+        // Calculate proportional tax and tip based on participant's total subtotal
+        if summary.subtotal > 0 && paidSubtotal > 0 {
+            let proportionalFactor = paidSubtotal / summary.subtotal
+            let paidTax = summary.tax * proportionalFactor
+            let paidTip = summary.tip * proportionalFactor
+            return paidSubtotal + paidTax + paidTip
+        }
+
+        return paidSubtotal
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -681,10 +934,21 @@ struct SentReceiptParticipantCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                         HStack(spacing: 8) {
-                            Text("\(summary.itemsCount) item\(summary.itemsCount == 1 ? "" : "s")")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.primary.opacity(0.7))
-                                .fixedSize()
+                            // Show paid items for "By Item" splits
+                            if configuration.splitType == .individual {
+                                let paidItemsCount = configuration.paidItems[summary.participant.id]?.count ?? 0
+                                let totalItems = getReceiptItemCount()
+
+                                Text("\(paidItemsCount)/\(totalItems) item\(totalItems == 1 ? "" : "s")")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.primary.opacity(0.7))
+                                    .fixedSize()
+                            } else {
+                                Text("\(summary.itemsCount) item\(summary.itemsCount == 1 ? "" : "s")")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.primary.opacity(0.7))
+                                    .fixedSize()
+                            }
 
                             // Status Badge
                             HStack(spacing: 4) {
@@ -710,15 +974,15 @@ struct SentReceiptParticipantCard: View {
 
                     // Amount
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(currency)\(summary.total, specifier: "%.2f")")
+                        let displayAmount = summary.isPaid && configuration.splitType == .individual ? calculatePaidAmount() : summary.total
+
+                        // Ensure the amount is valid (not infinity or NaN)
+                        let safeAmount = displayAmount.isFinite ? displayAmount : 0.0
+
+                        Text(currencyManager.format(amount: safeAmount))
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.primary)
                             .lineLimit(1)
-                            .fixedSize()
-
-                        Text("owes")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
                             .fixedSize()
                     }
                     .fixedSize()

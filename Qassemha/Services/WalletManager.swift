@@ -543,6 +543,7 @@ class WalletManager: ObservableObject {
         guard let userID = authManager.currentUserEmail else { return }
 
         var totalAmountToAdd: Double = 0
+        var shouldCheckBalance = false
 
         // Check if Chris's transaction exists
         let chrisRequest: NSFetchRequest<Transaction> = Transaction.fetchRequest()
@@ -560,6 +561,8 @@ class WalletManager: ObservableObject {
         do {
             let results = try context.fetch(chrisRequest)
             if let existingTransaction = results.first {
+                // Transaction exists, mark that we should verify wallet balance
+                shouldCheckBalance = true
                 // Update existing transaction if amount is wrong
                 if existingTransaction.amount != chrisAmount {
                     let oldAmount = existingTransaction.amount
@@ -606,6 +609,8 @@ class WalletManager: ObservableObject {
         do {
             let results = try context.fetch(samRequest)
             if let existingTransaction = results.first {
+                // Transaction exists, mark that we should verify wallet balance
+                shouldCheckBalance = true
                 // Update existing transaction if amount is wrong
                 if existingTransaction.amount != samAmount {
                     let oldAmount = existingTransaction.amount
@@ -641,6 +646,29 @@ class WalletManager: ObservableObject {
             saveContext()
             loadTransactions(for: userID)
             updateWalletBalance(userID: userID, amount: abs(totalAmountToAdd), isAddition: totalAmountToAdd > 0)
+        } else if shouldCheckBalance {
+            // Transactions exist but balance might be wrong - verify it
+            let expectedBalance = chrisAmount + samAmount  // 28.08 + 28.08 = 56.16
+
+            // Check current wallet balance
+            let request: NSFetchRequest<WalletBalance> = WalletBalance.fetchRequest()
+            request.predicate = NSPredicate(format: "userID == %@", userID)
+
+            do {
+                let results = try context.fetch(request)
+                if let wallet = results.first {
+                    // If wallet balance is incorrect, fix it
+                    if wallet.balance != expectedBalance {
+                        print("⚠️ Wallet balance mismatch. Expected: \(expectedBalance), Actual: \(wallet.balance). Correcting...")
+                        wallet.balance = expectedBalance
+                        wallet.lastUpdated = Date()
+                        saveContext()
+                        walletBalance = expectedBalance
+                    }
+                }
+            } catch {
+                print("Error checking wallet balance: \(error)")
+            }
         }
     }
 }

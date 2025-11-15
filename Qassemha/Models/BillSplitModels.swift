@@ -124,6 +124,7 @@ struct SplitConfiguration: Identifiable, Codable, Equatable {
     var includeTip: Bool
     var excludedParticipants: [UUID]  // Participants excluded from specific shared items
     var paidParticipants: [UUID]  // Participants who have paid their share
+    var paidItems: [UUID: Set<UUID>]  // Maps participant ID to set of item IDs they've paid for
     var adminId: UUID?  // The participant who created/owns this bill split
     var dueDate: Date?  // Payment due date for notifications
     var reminderSchedule: String?  // Reminder schedule for this specific split
@@ -131,7 +132,7 @@ struct SplitConfiguration: Identifiable, Codable, Equatable {
     var createdAt: Date
     var updatedAt: Date
 
-    init(id: UUID = UUID(), receiptId: UUID, splitType: SplitType = .equal, participants: [Participant] = [], itemAssignments: [ItemAssignment] = [], participantSplits: [ParticipantSplit] = [], includeTax: Bool = true, includeTip: Bool = true, excludedParticipants: [UUID] = [], paidParticipants: [UUID] = [], adminId: UUID? = nil, dueDate: Date? = nil, reminderSchedule: String? = nil, notes: String? = nil, createdAt: Date = Date(), updatedAt: Date = Date()) {
+    init(id: UUID = UUID(), receiptId: UUID, splitType: SplitType = .equal, participants: [Participant] = [], itemAssignments: [ItemAssignment] = [], participantSplits: [ParticipantSplit] = [], includeTax: Bool = true, includeTip: Bool = true, excludedParticipants: [UUID] = [], paidParticipants: [UUID] = [], paidItems: [UUID: Set<UUID>] = [:], adminId: UUID? = nil, dueDate: Date? = nil, reminderSchedule: String? = nil, notes: String? = nil, createdAt: Date = Date(), updatedAt: Date = Date()) {
         self.id = id
         self.receiptId = receiptId
         self.splitType = splitType
@@ -142,6 +143,7 @@ struct SplitConfiguration: Identifiable, Codable, Equatable {
         self.includeTip = includeTip
         self.excludedParticipants = excludedParticipants
         self.paidParticipants = paidParticipants
+        self.paidItems = paidItems
         self.adminId = adminId
         self.dueDate = dueDate
         self.reminderSchedule = reminderSchedule

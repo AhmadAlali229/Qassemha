@@ -58,9 +58,10 @@ struct PersistenceController {
                 print("   Open in Terminal: sqlite3 '\(url.path)'")
             }
 
-            // Seed hardcoded QR receipts on first launch
+            // Clean up any previously seeded QR receipts (old approach)
+            // New approach: receipts are created on-demand when scanned
             DispatchQueue.main.async {
-                ReceiptDataService.shared.seedHardcodedQRReceipts()
+                ReceiptDataService.shared.cleanupSeededReceipts()
             }
         })
         container.viewContext.automaticallyMergesChangesFromParent = true

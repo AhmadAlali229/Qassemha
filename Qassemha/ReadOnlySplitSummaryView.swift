@@ -13,6 +13,7 @@ struct ReadOnlySplitSummaryView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var manager = BillSplitManager.shared
     @StateObject private var walletManager = WalletManager.shared
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     @State private var selectedSummary: SplitSummary?
     @State private var localConfig: SplitConfiguration
@@ -164,7 +165,7 @@ struct ReadOnlySplitSummaryView: View {
                     Text("Subtotal")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("\(receipt.currency)\(receipt.subtotal, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.subtotal))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -175,7 +176,7 @@ struct ReadOnlySplitSummaryView: View {
                     Text("Tax")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("\(receipt.currency)\(receipt.tax, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.tax))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -186,7 +187,7 @@ struct ReadOnlySplitSummaryView: View {
                     Text("Tip")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("\(receipt.currency)\(receipt.tip, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.tip))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -197,7 +198,7 @@ struct ReadOnlySplitSummaryView: View {
                     Text("Total")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("\(receipt.currency)\(receipt.total, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: receipt.total))
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.primary)
                 }
@@ -284,7 +285,7 @@ struct ReadOnlySplitSummaryView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.primary)
 
-                Text("\(receipt.currency)\(paidAmount, specifier: "%.2f")")
+                Text(currencyManager.format(amount: paidAmount))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -317,7 +318,7 @@ struct ReadOnlySplitSummaryView: View {
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.primary)
 
-                Text("\(receipt.currency)\(totalAmount - paidAmount, specifier: "%.2f")")
+                Text(currencyManager.format(amount: totalAmount - paidAmount))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -347,7 +348,6 @@ struct ReadOnlySplitSummaryView: View {
                 ForEach(summaries) { summary in
                     ReceivedReceiptParticipantCard(
                         summary: summary,
-                        currency: receipt.currency,
                         isAdmin: localConfig.adminId == summary.participant.id,
                         onTap: {
                             selectedSummary = summary
@@ -370,8 +370,13 @@ struct ReadOnlySplitSummaryView: View {
     // MARK: - Helper Methods
 
     private func handlePayNowClick(for summary: SplitSummary) {
-        // Show item selection for payment
-        showItemSelection = true
+        // For equal split, skip item selection and go directly to payment
+        if localConfig.splitType == .equal {
+            paymentData = PaymentData(amount: summary.total, selectedItems: [])
+        } else {
+            // For other split types (by item, percentage, custom), show item selection
+            showItemSelection = true
+        }
     }
 
     private func handlePaymentCompletion(for selectedItems: Set<UUID>, result: PaymentCompletionResult) {
@@ -396,10 +401,10 @@ struct ReadOnlySplitSummaryView: View {
 
 struct ReceivedReceiptParticipantCard: View {
     let summary: SplitSummary
-    let currency: String
     let isAdmin: Bool
     let onTap: () -> Void
     let onPayNow: () -> Void
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -485,7 +490,7 @@ struct ReceivedReceiptParticipantCard: View {
 
                     // Amount
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text("\(currency)\(summary.total, specifier: "%.2f")")
+                        Text(currencyManager.format(amount: summary.total))
                             .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.primary)
                             .lineLimit(1)
