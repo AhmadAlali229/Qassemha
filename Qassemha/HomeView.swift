@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct HomeView: View {
-    @StateObject private var authManager = AuthenticationManager.shared
+    @ObservedObject private var authManager = AuthenticationManager.shared
     @State private var walletBalance: Double = 248.50
     @State private var pendingAmount: Double = 67.25
     @State private var isAnimating = false
@@ -374,9 +374,12 @@ struct RecentActivityCard: View {
 }
 
 struct ProfileView: View {
-    @StateObject private var authManager = AuthenticationManager.shared
+    @ObservedObject private var authManager = AuthenticationManager.shared
     @Environment(\.dismiss) private var dismiss
-    @State private var userName = "Harjot Singh"
+
+    var userName: String {
+        return authManager.currentUserName ?? "User"
+    }
 
     var body: some View {
         NavigationView {
