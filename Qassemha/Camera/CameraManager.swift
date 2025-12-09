@@ -12,16 +12,37 @@ import VisionKit
 import Vision
 import CoreImage
 
+// MARK: - Supporting Types
+
+enum ScanMode {
+    case auto        // Automatically detect both OCR and QR codes
+    case ocrOnly     // Focus on OCR text recognition
+    case qrOnly      // Focus on QR code scanning
+}
+
+struct QRCodeData: Identifiable, Equatable {
+    let id = UUID()
+    let value: String
+    let type: String
+    let bounds: CGRect?
+
+    static func == (lhs: QRCodeData, rhs: QRCodeData) -> Bool {
+        return lhs.value == rhs.value && lhs.type == rhs.type
+    }
+}
+
 class CameraManager: NSObject, ObservableObject {
     @Published var isCameraAuthorized = false
     @Published var isCameraUnavailable = false
     @Published var capturedImage: UIImage?
     @Published var detectedBarcodes: [String] = []
+    @Published var detectedQRCodes: [QRCodeData] = []
     @Published var isFlashOn = false
     @Published var extractedText = ""
     @Published var isProcessing = false
     @Published var error: CameraError?
     @Published var isSessionReady = false
+    @Published var scanMode: ScanMode = .auto // New: control scan mode
 
     var captureSession: AVCaptureSession?
     private var videoOutput: AVCaptureVideoDataOutput?
@@ -410,8 +431,13 @@ class CameraManager: NSObject, ObservableObject {
         capturedImage = nil
         extractedText = ""
         detectedBarcodes = []
+        detectedQRCodes = []
         isProcessing = false
         error = nil
+    }
+
+    func clearQRCodes() {
+        detectedQRCodes = []
     }
 
     private func cleanOCRText(_ text: String) -> String {
@@ -474,20 +500,55 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
 
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        // Real-time barcode detection
+        // Real-time barcode and QR code detection
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         let request = VNDetectBarcodesRequest { [weak self] request, error in
             guard let observations = request.results as? [VNBarcodeObservation],
-                  !observations.isEmpty else { return }
+                  !observations.isEmpty else {
+                // Don't clear detected codes - keep them persistent once found
+                // Only clear barcodes (not QR codes) if nothing found
+                DispatchQueue.main.async {
+                    self?.detectedBarcodes = []
+                }
+                return
+            }
 
-            let barcodes = observations.compactMap { $0.payloadStringValue }
+            // Separate QR codes from other barcodes
+            var qrCodes: [QRCodeData] = []
+            var otherBarcodes: [String] = []
 
-            DispatchQueue.main.async {
-                if !barcodes.isEmpty && self?.detectedBarcodes != barcodes {
-                    self?.detectedBarcodes = barcodes
+            for observation in observations {
+                if let payload = observation.payloadStringValue {
+                    // Check if it's a QR code
+                    if observation.symbology == .qr {
+                        let qrData = QRCodeData(
+                            value: payload,
+                            type: "QR Code",
+                            bounds: observation.boundingBox
+                        )
+                        qrCodes.append(qrData)
+                    } else {
+                        otherBarcodes.append(payload)
+                    }
                 }
             }
+
+            DispatchQueue.main.async {
+                // Only update QR codes if new ones are detected - never clear them automatically
+                if !qrCodes.isEmpty && self?.detectedQRCodes != qrCodes {
+                    self?.detectedQRCodes = qrCodes
+                    print("📱 QR Code detected: \(qrCodes.map { $0.value }.joined(separator: ", "))")
+                }
+                if !otherBarcodes.isEmpty && self?.detectedBarcodes != otherBarcodes {
+                    self?.detectedBarcodes = otherBarcodes
+                }
+            }
+        }
+
+        // Optimize for QR code detection
+        if #available(iOS 15.0, *) {
+            request.symbologies = [.qr, .ean13, .ean8, .upce, .code128, .code39]
         }
 
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])

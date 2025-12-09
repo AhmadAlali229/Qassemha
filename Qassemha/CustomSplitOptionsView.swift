@@ -212,6 +212,7 @@ struct CustomSplitOptionsView: View {
                         participant: participant,
                         splitType: configuration.splitType,
                         receiptTotal: receipt.total,
+                        currency: receipt.currency,
                         value: Binding(
                             get: {
                                 if let splitIndex = configuration.participantSplits.firstIndex(where: { $0.participantId == participant.id }) {
@@ -383,6 +384,7 @@ struct CustomSplitParticipantRow: View {
     let participant: Participant
     let splitType: SplitType
     let receiptTotal: Double
+    let currency: String
     @Binding var value: Double
 
     @FocusState private var isFocused: Bool
@@ -413,7 +415,7 @@ struct CustomSplitParticipantRow: View {
                     .foregroundColor(.primary)
 
                 if splitType == .percentage {
-                    Text("≈ $\(equivalentAmount, specifier: "%.2f")")
+                    Text("≈ \(currency)\(equivalentAmount, specifier: "%.2f")")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.secondary)
                 }
@@ -424,7 +426,7 @@ struct CustomSplitParticipantRow: View {
             // Input Field
             HStack(spacing: 4) {
                 if splitType == .custom {
-                    Text("$")
+                    Text(currency)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.secondary)
                 }

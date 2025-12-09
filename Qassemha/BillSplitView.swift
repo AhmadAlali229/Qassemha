@@ -158,7 +158,7 @@ struct BillSplitView: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
 
-                    Text("$\(receipt.total, specifier: "%.2f")")
+                    Text("\(receipt.currency)\(receipt.total, specifier: "%.2f")")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.primary)
                 }
@@ -182,7 +182,7 @@ struct BillSplitView: View {
                     Text("Tax")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("$\(receipt.tax, specifier: "%.2f")")
+                    Text("\(receipt.currency)\(receipt.tax, specifier: "%.2f")")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -193,7 +193,7 @@ struct BillSplitView: View {
                     Text("Tip")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
-                    Text("$\(receipt.tip, specifier: "%.2f")")
+                    Text("\(receipt.currency)\(receipt.tip, specifier: "%.2f")")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.primary)
                 }
@@ -452,7 +452,7 @@ struct BillSplitView: View {
 
                                 Spacer()
 
-                                Text("$\(summary.total, specifier: "%.2f")")
+                                Text("\(receipt.currency)\(summary.total, specifier: "%.2f")")
                                     .font(.system(size: 18, weight: .bold))
                                     .foregroundColor(.blue)
                             }

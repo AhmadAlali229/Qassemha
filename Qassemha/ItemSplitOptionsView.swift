@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ItemSplitOptionsView: View {
     let item: ReceiptItem
+    let receipt: Receipt
     @Binding var configuration: SplitConfiguration
     @Environment(\.dismiss) private var dismiss
 
@@ -320,6 +321,7 @@ struct ItemSplitOptionsView: View {
                             participant: participant,
                             splitType: itemSplitType,
                             itemTotal: item.totalPrice,
+                            currency: receipt.currency,
                             value: Binding(
                                 get: { customValues[participantId] ?? 0 },
                                 set: { customValues[participantId] = $0 }
@@ -472,6 +474,7 @@ struct ItemSplitValueRow: View {
     let participant: Participant
     let splitType: ItemAssignment.ItemSplitType
     let itemTotal: Double
+    let currency: String
     @Binding var value: Double
 
     @FocusState private var isFocused: Bool
@@ -500,7 +503,7 @@ struct ItemSplitValueRow: View {
                     .foregroundColor(.primary)
 
                 if splitType == .percentage {
-                    Text("≈ $\(equivalentAmount, specifier: "%.2f")")
+                    Text("≈ \(currency)\(equivalentAmount, specifier: "%.2f")")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.secondary)
                 }
@@ -510,7 +513,7 @@ struct ItemSplitValueRow: View {
 
             HStack(spacing: 4) {
                 if splitType == .custom {
-                    Text("$")
+                    Text(currency)
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.secondary)
                 }
@@ -572,6 +575,18 @@ extension ItemAssignment.ItemSplitType {
             totalPrice: 16.99,
             category: .main,
             tags: []
+        ),
+        receipt: Receipt(
+            storeName: "Olive Garden",
+            date: Date(),
+            items: [],
+            subtotal: 28.58,
+            tax: 2.86,
+            tip: 2.14,
+            total: 33.58,
+            currency: "USD",
+            scanType: .manual,
+            category: .food
         ),
         configuration: .constant(SplitConfiguration(
             receiptId: UUID(),
