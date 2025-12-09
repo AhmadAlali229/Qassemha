@@ -20,6 +20,7 @@ struct ReadOnlySplitSummaryView: View {
     @State private var showInsufficientFundsAlert = false
     @State private var insufficientAmount: Double = 0.0
     @State private var showAddFunds = false
+    @State private var showItemSelection = false
 
     init(receipt: Receipt, configuration: SplitConfiguration) {
         self.receipt = receipt
@@ -93,6 +94,15 @@ struct ReadOnlySplitSummaryView: View {
         }
         .sheet(isPresented: $showAddFunds) {
             AddFundsView(isPresented: $showAddFunds)
+        }
+        .sheet(isPresented: $showItemSelection) {
+            SelectItemsForPaymentView(
+                receipt: receipt,
+                configuration: localConfig,
+                onConfirm: { selectedItems in
+                    handlePayment(for: selectedItems)
+                }
+            )
         }
         .alert("Insufficient Funds", isPresented: $showInsufficientFundsAlert) {
             Button("Add Funds") {
@@ -348,16 +358,54 @@ struct ReadOnlySplitSummaryView: View {
     // MARK: - Helper Methods
 
     private func handlePayNowClick(for summary: SplitSummary) {
+        // Show item selection for payment
+        showItemSelection = true
+    }
+
+    private func handlePayment(for selectedItems: Set<UUID>) {
+        // Calculate total for selected items
+        let youParticipant = localConfig.participants.first(where: { $0.name == "You" })
+        guard let youId = youParticipant?.id else { return }
+
+        var totalAmount: Double = 0.0
+
+        for itemId in selectedItems {
+            if let item = receipt.items.first(where: { $0.id == itemId }) {
+                if let assignment = localConfig.itemAssignments.first(where: { $0.itemId == itemId }) {
+                    // Calculate amount based on split type
+                    let participantCount = Double(assignment.participants.count)
+                    let itemAmount: Double
+
+                    switch assignment.splitType {
+                    case .equal:
+                        itemAmount = item.totalPrice / participantCount
+                    case .percentage:
+                        let percentage = assignment.customSplits[youId] ?? 0
+                        itemAmount = item.totalPrice * (percentage / 100.0)
+                    case .custom:
+                        itemAmount = assignment.customSplits[youId] ?? 0
+                    }
+
+                    totalAmount += itemAmount
+                }
+            }
+        }
+
         // Check if wallet has sufficient balance
-        let requiredAmount = summary.total
         let currentBalance = walletManager.walletBalance
 
-        if currentBalance >= requiredAmount {
-            // Sufficient funds - proceed with payment
-            participantToPay = summary
+        if currentBalance >= totalAmount {
+            // Sufficient funds - deduct from wallet and mark as paid
+            walletManager.deductFromWallet(amount: totalAmount)
+
+            // Mark participant as paid locally
+            if !localConfig.paidParticipants.contains(youId) {
+                localConfig.paidParticipants.append(youId)
+            }
+            localConfig.updatedAt = Date()
         } else {
             // Insufficient funds - show alert
-            insufficientAmount = requiredAmount
+            insufficientAmount = totalAmount
             showInsufficientFundsAlert = true
         }
     }
