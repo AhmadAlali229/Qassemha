@@ -18,6 +18,7 @@ struct ReceiptReviewView: View {
     @State private var isDeleting = false
     @State private var selectedCategory: Receipt.ReceiptCategory
     @State private var showingCategoryPicker = false
+    @State private var showingBillSplit = false
 
     init(receipt: Binding<Receipt>, isPresented: Binding<Bool>) {
         self._receipt = receipt
@@ -111,6 +112,7 @@ struct ReceiptReviewView: View {
                                             Text(receipt.scanType.description)
                                                 .font(.system(size: 12))
                                                 .foregroundColor(.secondary)
+                                                .lineLimit(1)
                                         }
                                     }
                                 }
@@ -206,8 +208,8 @@ struct ReceiptReviewView: View {
                     .padding(.horizontal, 20)
 
                     // Action Buttons
-                    if !isSaved || showSaveSuccess {
-                        VStack(spacing: 12) {
+                    VStack(spacing: 12) {
+                        if !isSaved || showSaveSuccess {
                             Button(action: {
                                 saveReceipt()
                             }) {
@@ -241,10 +243,38 @@ struct ReceiptReviewView: View {
                                 .shadow(color: ((showSaveSuccess && !isSaving) ? Color.green : Color.blue).opacity(0.3), radius: 8, x: 0, y: 4)
                             }
                             .disabled(isSaving || showSaveSuccess)
+                            .transition(.opacity)
                         }
-                        .padding(.horizontal, 20)
-                        .transition(.opacity)
+
+                        // Split Bill Button - Only show if receipt is saved
+                        if isSaved && !showSaveSuccess {
+                            Button(action: {
+                                showingBillSplit = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "person.3.fill")
+                                        .font(.system(size: 20))
+
+                                    Text("Split Bill")
+                                }
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 56)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [.purple, .purple.opacity(0.8)]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .shadow(color: Color.purple.opacity(0.3), radius: 8, x: 0, y: 4)
+                            }
+                        }
                     }
+                    .padding(.horizontal, 20)
+                    .transition(.opacity)
 
                     Spacer(minLength: 40)
                 }
@@ -297,6 +327,9 @@ struct ReceiptReviewView: View {
         .sheet(isPresented: $showingCategoryPicker) {
             CategoryPickerView(selectedCategory: $selectedCategory, isPresented: $showingCategoryPicker)
                 .presentationDetents([.medium])
+        }
+        .fullScreenCover(isPresented: $showingBillSplit) {
+            BillSplitView(receipt: receipt)
         }
         .onChange(of: selectedCategory) { _, newCategory in
             receipt.category = newCategory

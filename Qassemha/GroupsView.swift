@@ -9,6 +9,7 @@ import SwiftUI
 
 struct GroupsView: View {
     @ObservedObject var groupManager = GroupManager.shared
+    @StateObject private var navigationCoordinator = NavigationCoordinator.shared
     @State private var searchText = ""
     @State private var showingNewGroup = false
     @State private var selectedGroup: SavedGroup?
@@ -202,6 +203,13 @@ struct GroupsView: View {
             }
             .onAppear {
                 groupManager.fetchGroups()
+            }
+            .onChange(of: navigationCoordinator.shouldShowNewGroup) { shouldShow in
+                if shouldShow {
+                    // Auto-trigger new group from home screen
+                    showingNewGroup = true
+                    navigationCoordinator.resetGroupTrigger()
+                }
             }
         }
     }
