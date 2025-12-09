@@ -120,6 +120,12 @@ class WalletManager: ObservableObject {
             .reduce(0.0) { $0 + $1.amount }
     }
 
+    // MARK: - Transaction Retrieval
+
+    func getAllTransactions() -> [TransactionModel] {
+        return transactions
+    }
+
     // MARK: - Wallet Operations
 
     func addFunds(amount: Double, paymentMethod: PaymentMethodModel, completion: @escaping (Result<TransactionModel, Error>) -> Void) {

@@ -10,7 +10,7 @@ import SwiftUI
 struct SelectItemsForPaymentView: View {
     let receipt: Receipt
     let configuration: SplitConfiguration
-    let onConfirm: (Set<UUID>) -> Void
+    let onConfirm: (Set<UUID>, Double) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var currencyManager = CurrencyManager.shared
@@ -170,7 +170,7 @@ struct SelectItemsForPaymentView: View {
                             Spacer()
 
                             Button(action: {
-                                onConfirm(selectedItems)
+                                onConfirm(selectedItems, totalAmount)
                                 dismiss()
                             }) {
                                 HStack(spacing: 8) {
@@ -439,6 +439,6 @@ struct SelectableItemCard: View {
                 )
             ]
         ),
-        onConfirm: { _ in }
+        onConfirm: { _, _ in }
     )
 }
