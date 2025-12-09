@@ -11,8 +11,35 @@
         <attribute name="phoneNumber" optional="NO" attributeType="String"/>
         <attribute name="userID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
     </entity>
+    <entity name="Contact" representedClassName="Contact" syncable="YES" codeGenerationType="class">
+        <attribute name="contactID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="email" optional="YES" attributeType="String"/>
+        <attribute name="name" optional="NO" attributeType="String"/>
+        <attribute name="phoneNumber" optional="YES" attributeType="String"/>
+        <attribute name="profileImageData" optional="YES" attributeType="Binary"/>
+        <relationship name="groupMemberships" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="GroupMember" inverseName="contact" inverseEntity="GroupMember"/>
+    </entity>
+    <entity name="SavedGroup" representedClassName="SavedGroup" syncable="YES" codeGenerationType="class">
+        <attribute name="colorHex" optional="NO" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="groupID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="icon" optional="NO" attributeType="String"/>
+        <attribute name="isFavorite" optional="YES" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lastUsed" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="name" optional="NO" attributeType="String"/>
+        <relationship name="members" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="GroupMember" inverseName="group" inverseEntity="GroupMember"/>
+    </entity>
+    <entity name="GroupMember" representedClassName="GroupMember" syncable="YES" codeGenerationType="class">
+        <attribute name="memberID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <relationship name="contact" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="Contact" inverseName="groupMemberships" inverseEntity="Contact"/>
+        <relationship name="group" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="SavedGroup" inverseName="members" inverseEntity="SavedGroup"/>
+    </entity>
     <elements>
         <element name="Item" positionX="-63" positionY="-18" width="128" height="44"/>
         <element name="User" positionX="-45" positionY="63" width="128" height="104"/>
+        <element name="Contact" positionX="-54" positionY="108" width="128" height="134"/>
+        <element name="SavedGroup" positionX="-36" positionY="126" width="128" height="149"/>
+        <element name="GroupMember" positionX="-18" positionY="144" width="128" height="74"/>
     </elements>
 </model>
