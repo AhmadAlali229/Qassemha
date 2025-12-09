@@ -11,6 +11,19 @@ struct ReceiptReviewView: View {
     @Binding var receipt: Receipt
     @Binding var isPresented: Bool
     @State private var showingImageViewer = false
+    @State private var isSaved = false
+    @State private var showingDeleteConfirmation = false
+    @State private var isSaving = false
+    @State private var showSaveSuccess = false
+    @State private var isDeleting = false
+    @State private var selectedCategory: Receipt.ReceiptCategory
+    @State private var showingCategoryPicker = false
+
+    init(receipt: Binding<Receipt>, isPresented: Binding<Bool>) {
+        self._receipt = receipt
+        self._isPresented = isPresented
+        self._selectedCategory = State(initialValue: receipt.wrappedValue.category)
+    }
 
     var body: some View {
         NavigationView {
@@ -50,33 +63,55 @@ struct ReceiptReviewView: View {
                                         .foregroundColor(.secondary)
                                 }
 
-                                HStack(spacing: 8) {
-                                    Image(systemName: receipt.category.icon)
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(receipt.category.color)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    // Category Picker Button
+                                    if !isSaved {
+                                        Button(action: {
+                                            showingCategoryPicker = true
+                                        }) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: selectedCategory.icon)
+                                                    .font(.system(size: 12, weight: .medium))
+                                                Text(selectedCategory.rawValue)
+                                                    .font(.system(size: 12, weight: .medium))
+                                                    .lineLimit(1)
+                                                Image(systemName: "chevron.down")
+                                                    .font(.system(size: 10, weight: .medium))
+                                            }
+                                            .foregroundColor(selectedCategory.color)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(selectedCategory.color.opacity(0.15))
+                                            .cornerRadius(8)
+                                        }
+                                    } else {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: selectedCategory.icon)
+                                                .font(.system(size: 12, weight: .medium))
+                                            Text(selectedCategory.rawValue)
+                                                .font(.system(size: 12, weight: .medium))
+                                                .lineLimit(1)
+                                        }
+                                        .foregroundColor(selectedCategory.color)
+                                    }
 
-                                    Text(receipt.category.rawValue)
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(receipt.category.color)
-
-                                    Text("•")
-                                        .foregroundColor(.secondary)
-
-                                    Text(receipt.formattedDate)
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.secondary)
-
-                                    Text("•")
-                                        .foregroundColor(.secondary)
-
-                                    HStack(spacing: 4) {
-                                        Image(systemName: receipt.scanType.icon)
+                                    HStack(spacing: 8) {
+                                        Text(receipt.formattedDate)
                                             .font(.system(size: 12))
                                             .foregroundColor(.secondary)
 
-                                        Text(receipt.scanType.description)
-                                            .font(.system(size: 12))
+                                        Text("•")
                                             .foregroundColor(.secondary)
+
+                                        HStack(spacing: 4) {
+                                            Image(systemName: receipt.scanType.icon)
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.secondary)
+
+                                            Text(receipt.scanType.description)
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.secondary)
+                                        }
                                     }
                                 }
                             }
@@ -170,39 +205,45 @@ struct ReceiptReviewView: View {
                     .padding(.horizontal, 20)
 
                     // Action Buttons
-                    VStack(spacing: 12) {
-                        Button("Continue to Split Bill") {
-                            // Navigate to bill splitting
-                            isPresented = false
-                        }
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(
-                            LinearGradient(
-                                gradient: Gradient(colors: [.blue, .cyan]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                    if !isSaved || showSaveSuccess {
+                        VStack(spacing: 12) {
+                            Button(action: {
+                                saveReceipt()
+                            }) {
+                                HStack {
+                                    if isSaving {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(1.2)
+                                    } else if showSaveSuccess {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .font(.system(size: 20))
+                                    } else {
+                                        Image(systemName: "square.and.arrow.down")
+                                            .font(.system(size: 20))
+                                    }
 
-                        Button("Save for Later") {
-                            // Save receipt
-                            isPresented = false
+                                    Text(isSaving ? "Saving..." : (showSaveSuccess ? "Saved!" : "Save Receipt"))
+                                }
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 56)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: (showSaveSuccess && !isSaving) ? [.green, .green.opacity(0.8)] : [.blue, .cyan]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .shadow(color: ((showSaveSuccess && !isSaving) ? Color.green : Color.blue).opacity(0.3), radius: 8, x: 0, y: 4)
+                            }
+                            .disabled(isSaving || showSaveSuccess)
                         }
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.blue)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(.blue, lineWidth: 2)
-                        )
+                        .padding(.horizontal, 20)
+                        .transition(.opacity)
                     }
-                    .padding(.horizontal, 20)
 
                     Spacer(minLength: 40)
                 }
@@ -214,36 +255,154 @@ struct ReceiptReviewView: View {
             .navigationBarBackButtonHidden(true)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Back") {
-                        isPresented = false
-                    }
-                }
-
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Menu {
-                        Button("Retake Photo") {
-                            // Return to camera
-                        }
-
-                        Button("Share Receipt") {
-                            // Share functionality
-                        }
-
-                        Button("Delete", role: .destructive) {
-                            // Delete confirmation
+                    Button(action: {
+                        DispatchQueue.main.async {
                             isPresented = false
                         }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.system(size: 18))
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Back")
+                        }
                     }
                 }
+
+                if isSaved {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button(action: {
+                            DispatchQueue.main.async {
+                                showingDeleteConfirmation = true
+                            }
+                        }) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 18))
+                                .foregroundColor(.red)
+                        }
+                    }
+                }
+            }
+            .task {
+                // Check if saved immediately on task start (before view appears)
+                await checkIfSaved()
             }
         }
         .fullScreenCover(isPresented: $showingImageViewer) {
             if let imageData = receipt.imageData,
                let uiImage = UIImage(data: imageData) {
                 ReceiptImageViewer(image: uiImage, isPresented: $showingImageViewer)
+            }
+        }
+        .sheet(isPresented: $showingCategoryPicker) {
+            CategoryPickerView(selectedCategory: $selectedCategory, isPresented: $showingCategoryPicker)
+                .presentationDetents([.medium])
+        }
+        .onChange(of: selectedCategory) { _, newCategory in
+            receipt.category = newCategory
+        }
+        .alert("Delete Receipt", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) {
+                DispatchQueue.main.async {
+                    showingDeleteConfirmation = false
+                }
+            }
+            Button("Delete", role: .destructive) {
+                DispatchQueue.main.async {
+                    showingDeleteConfirmation = false
+                    deleteReceipt()
+                }
+            }
+        } message: {
+            Text("Are you sure you want to delete this receipt? This action cannot be undone.")
+        }
+        .overlay {
+            if isDeleting {
+                ZStack {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
+                        .transition(.opacity)
+
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(1.5)
+
+                        Text("Deleting...")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.white)
+                    }
+                    .padding(32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(.ultraThinMaterial)
+                    )
+                    .transition(.scale.combined(with: .opacity))
+                }
+            }
+        }
+    }
+
+    private func saveReceipt() {
+        // Show saving state immediately
+        withAnimation {
+            isSaving = true
+        }
+
+        // Update receipt with selected category before saving
+        var updatedReceipt = receipt
+        updatedReceipt.category = selectedCategory
+
+        // Perform save operation on background thread
+        DispatchQueue.global(qos: .userInitiated).async {
+            CoreDataManager.shared.saveReceipt(updatedReceipt)
+
+            // Update UI on main thread
+            DispatchQueue.main.async {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isSaving = false
+                    showSaveSuccess = true
+                    isSaved = true
+                }
+
+                // Keep success message visible for 2 seconds to ensure visibility
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        isPresented = false
+                    }
+                }
+            }
+        }
+    }
+
+    private func checkIfSaved() async {
+        // Check on background thread
+        let saved = await Task.detached(priority: .userInitiated) {
+            let savedReceipts = CoreDataManager.shared.getSavedReceipts()
+            return savedReceipts.contains { $0.id == self.receipt.id }
+        }.value
+
+        // Update on main thread without animation to prevent layout delays
+        await MainActor.run {
+            self.isSaved = saved
+        }
+    }
+
+    private func deleteReceipt() {
+        // Show deleting state immediately
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isDeleting = true
+        }
+
+        // Perform delete operation on background thread with higher priority
+        DispatchQueue.global(qos: .userInitiated).async {
+            CoreDataManager.shared.deleteReceipt(self.receipt)
+
+            // Update UI on main thread and dismiss immediately
+            DispatchQueue.main.async {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    self.isDeleting = false
+                    self.isPresented = false
+                }
             }
         }
     }
@@ -416,6 +575,69 @@ extension Receipt.ScanType {
         case .manual: return "Manual"
         case .barcode: return "Barcode"
         case .qrCode: return "QR Code"
+        }
+    }
+}
+
+// MARK: - Category Picker View
+
+struct CategoryPickerView: View {
+    @Binding var selectedCategory: Receipt.ReceiptCategory
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        NavigationView {
+            List {
+                ForEach(Receipt.ReceiptCategory.allCases, id: \.self) { category in
+                    Button(action: {
+                        withAnimation {
+                            selectedCategory = category
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            isPresented = false
+                        }
+                    }) {
+                        HStack(spacing: 16) {
+                            // Category Icon
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(category.color.opacity(0.15))
+                                    .frame(width: 44, height: 44)
+
+                                Image(systemName: category.icon)
+                                    .font(.system(size: 20, weight: .medium))
+                                    .foregroundColor(category.color)
+                            }
+
+                            // Category Name
+                            Text(category.rawValue)
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundColor(.primary)
+
+                            Spacer()
+
+                            // Checkmark if selected
+                            if selectedCategory == category {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(category.color)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .listRowBackground(selectedCategory == category ? category.color.opacity(0.08) : Color.clear)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Select Category")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        isPresented = false
+                    }
+                }
+            }
         }
     }
 }
