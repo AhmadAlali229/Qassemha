@@ -49,6 +49,7 @@
         <attribute name="imageData" optional="YES" attributeType="Binary"/>
         <attribute name="scanType" optional="NO" attributeType="String"/>
         <attribute name="category" optional="NO" attributeType="String"/>
+        <attribute name="receiptType" optional="NO" attributeType="String" defaultValueString="Sent"/>
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="items" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="StoredReceiptItem" inverseName="receipt" inverseEntity="StoredReceiptItem"/>
         <relationship name="qrCodes" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="QRCodeReceipt" inverseName="receipt" inverseEntity="QRCodeReceipt"/>
@@ -71,6 +72,55 @@
         <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
         <relationship name="receipt" optional="NO" maxCount="1" deletionRule="Cascade" destinationEntity="StoredReceipt" inverseName="qrCodes" inverseEntity="StoredReceipt"/>
     </entity>
+    <entity name="WalletBalance" representedClassName="WalletBalance" syncable="YES" codeGenerationType="class">
+        <attribute name="walletID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="userID" optional="NO" attributeType="String"/>
+        <attribute name="balance" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="currency" optional="NO" attributeType="String" defaultValueString="USD"/>
+        <attribute name="lastUpdated" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="Transaction" representedClassName="Transaction" syncable="YES" codeGenerationType="class">
+        <attribute name="transactionID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="userID" optional="NO" attributeType="String"/>
+        <attribute name="type" optional="NO" attributeType="String"/>
+        <attribute name="amount" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="currency" optional="NO" attributeType="String" defaultValueString="USD"/>
+        <attribute name="status" optional="NO" attributeType="String" defaultValueString="pending"/>
+        <attribute name="paymentMethod" optional="NO" attributeType="String"/>
+        <attribute name="transactionReference" optional="NO" attributeType="String"/>
+        <attribute name="transactionDescription" optional="YES" attributeType="String"/>
+        <attribute name="relatedBillSplitID" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="completedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="PaymentMethod" representedClassName="PaymentMethod" syncable="YES" codeGenerationType="class">
+        <attribute name="paymentMethodID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="userID" optional="NO" attributeType="String"/>
+        <attribute name="type" optional="NO" attributeType="String"/>
+        <attribute name="lastFourDigits" optional="NO" attributeType="String"/>
+        <attribute name="cardBrand" optional="YES" attributeType="String"/>
+        <attribute name="bankName" optional="YES" attributeType="String"/>
+        <attribute name="expiryMonth" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="expiryYear" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="isDefault" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="nickname" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="PaymentRecord" representedClassName="PaymentRecord" syncable="YES" codeGenerationType="class">
+        <attribute name="paymentRecordID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="billSplitID" optional="NO" attributeType="String"/>
+        <attribute name="payerUserID" optional="NO" attributeType="String"/>
+        <attribute name="payeeUserID" optional="NO" attributeType="String"/>
+        <attribute name="amount" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="currency" optional="NO" attributeType="String" defaultValueString="USD"/>
+        <attribute name="paymentMethod" optional="NO" attributeType="String"/>
+        <attribute name="status" optional="NO" attributeType="String" defaultValueString="pending"/>
+        <attribute name="transactionID" optional="YES" attributeType="String"/>
+        <attribute name="dueDate" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="paidAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
     <elements>
         <element name="Item" positionX="-63" positionY="-18" width="128" height="44"/>
         <element name="User" positionX="-45" positionY="63" width="128" height="104"/>
@@ -80,5 +130,9 @@
         <element name="StoredReceipt" positionX="0" positionY="162" width="128" height="269"/>
         <element name="StoredReceiptItem" positionX="18" positionY="180" width="128" height="179"/>
         <element name="QRCodeReceipt" positionX="36" positionY="198" width="128" height="89"/>
+        <element name="WalletBalance" positionX="54" positionY="216" width="128" height="104"/>
+        <element name="Transaction" positionX="72" positionY="234" width="128" height="209"/>
+        <element name="PaymentMethod" positionX="90" positionY="252" width="128" height="194"/>
+        <element name="PaymentRecord" positionX="108" positionY="270" width="128" height="224"/>
     </elements>
 </model>

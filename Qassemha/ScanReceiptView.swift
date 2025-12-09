@@ -13,6 +13,8 @@ struct ScanReceiptView: View {
     @StateObject private var demoData = DemoReceiptData.shared
     @StateObject private var cameraManager = CameraManager()
     @StateObject private var navigationCoordinator = NavigationCoordinator.shared
+    @StateObject private var authManager = AuthenticationManager.shared
+    @StateObject private var billSplitManager = BillSplitManager.shared
     @State private var isAnimating = false
     @State private var showingCamera = false
     @State private var showingManualEntry = false
@@ -266,8 +268,35 @@ struct ScanReceiptView: View {
 
     private func loadRecentReceipts() {
         let allReceipts = CoreDataManager.shared.getSavedReceipts()
-        totalReceiptsCount = allReceipts.count
-        recentReceipts = Array(allReceipts.prefix(3))
+
+        // Filter by user - only show receipts created by current user (or examples)
+        let currentUserPhone = authManager.currentUserPhoneNumber
+        let filteredReceipts = allReceipts.filter { receipt in
+            // Always show example receipts
+            let isExample = receipt.id.uuidString.hasPrefix("00000000-0000-0000-0000")
+            if isExample {
+                return true
+            }
+
+            // Check if receipt has a configuration
+            if let config = billSplitManager.getConfiguration(for: receipt.id) {
+                // If config has adminId, only show if current user is the admin
+                if let adminId = config.adminId {
+                    let isCurrentUserAdmin = config.participants.contains { participant in
+                        participant.id == adminId && participant.phoneNumber == currentUserPhone
+                    }
+                    return isCurrentUserAdmin
+                }
+                // If config exists but no adminId, show it (legacy receipts)
+                return true
+            }
+
+            // If no config exists, show it (newly added manual receipts)
+            return true
+        }
+
+        totalReceiptsCount = filteredReceipts.count
+        recentReceipts = Array(filteredReceipts.prefix(3))
     }
 
     private func requestCameraPermission() {

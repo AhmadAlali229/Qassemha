@@ -20,9 +20,16 @@ class BillSplitManager: ObservableObject {
     // MARK: - Configuration Management
 
     func createConfiguration(for receipt: Receipt, participants: [Participant]) -> SplitConfiguration {
+        // Find current user as admin
+        let currentUserPhone = AuthenticationManager.shared.currentUserPhoneNumber
+        let adminParticipant = participants.first { participant in
+            participant.phoneNumber == currentUserPhone
+        }
+
         var config = SplitConfiguration(
             receiptId: receipt.id,
-            participants: participants
+            participants: participants,
+            adminId: adminParticipant?.id ?? participants.first?.id
         )
 
         // Initialize participant splits
@@ -344,6 +351,32 @@ class BillSplitManager: ObservableObject {
             return
         }
         splitConfigurations = configs
+    }
+
+    // MARK: - Pending Payments Calculation
+
+    func calculateTotalPendingPayments() -> Double {
+        let coreDataManager = CoreDataManager.shared
+        let allReceipts = coreDataManager.getSavedReceipts()
+        var totalPending: Double = 0.0
+
+        // Get all receipts that have split configurations
+        for (receiptId, config) in splitConfigurations {
+            // Try to find the receipt
+            if let receipt = allReceipts.first(where: { $0.id == receiptId }) {
+                // Generate summaries for this receipt
+                let summaries = generateSplitSummaries(receipt: receipt, config: config)
+
+                // Sum up unpaid amounts
+                for summary in summaries {
+                    if !summary.isPaid {
+                        totalPending += summary.total
+                    }
+                }
+            }
+        }
+
+        return totalPending
     }
 
     private func notifyUpdate() {
