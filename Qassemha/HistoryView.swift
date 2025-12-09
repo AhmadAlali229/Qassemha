@@ -9,6 +9,7 @@ import SwiftUI
 import CoreData
 
 struct HistoryView: View {
+<<<<<<< HEAD
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject private var currencyManager = CurrencyManager.shared
     @ObservedObject private var walletManager = WalletManager.shared
@@ -18,6 +19,9 @@ struct HistoryView: View {
         animation: .default)
     private var receipts: FetchedResults<StoredReceipt>
 
+=======
+    @ObservedObject private var currencyManager = CurrencyManager.shared
+>>>>>>> 6f95081 (Add multi-currency support (SAR/USD) and fix transaction status display)
     @State private var selectedFilter = "All"
     @State private var searchText = ""
     @State private var showingFilters = false
@@ -155,6 +159,7 @@ struct HistoryView: View {
                         .transition(.opacity)
                 }
 
+<<<<<<< HEAD
                 // Quick Actions
                 HStack(spacing: 12) {
                     Button(action: { showingReports = true }) {
@@ -172,6 +177,99 @@ struct HistoryView: View {
                                          endPoint: .trailing)
                         )
                         .cornerRadius(10)
+=======
+                Spacer()
+            }
+            .frame(maxWidth: .infinity)
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.blue.opacity(0.05),
+                        Color.cyan.opacity(0.02),
+                        Color.white
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .navigationTitle("History")
+            .navigationBarTitleDisplayMode(.large)
+        }
+    }
+}
+
+struct HistoryTransaction: Identifiable {
+    let id: Int
+    let title: String
+    let date: Date
+    let total: Double
+    let yourShare: Double
+    let participants: [String]
+    let status: String
+    let items: [String]
+    let type: String
+}
+
+struct HistoryTransactionCard: View {
+    let transaction: HistoryTransaction
+    @ObservedObject private var currencyManager = CurrencyManager.shared
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        let now = Date()
+        let calendar = Calendar.current
+
+        if calendar.isDate(date, inSameDayAs: now) {
+            return "Today"
+        } else if calendar.isDate(date, inSameDayAs: calendar.date(byAdding: .day, value: -1, to: now) ?? now) {
+            return "Yesterday"
+        } else if calendar.dateInterval(of: .weekOfYear, for: now)?.contains(date) == true {
+            formatter.dateFormat = "EEEE"
+            return formatter.string(from: date)
+        } else {
+            formatter.dateStyle = .medium
+            return formatter.string(from: date)
+        }
+    }
+
+    private var statusColor: Color {
+        switch transaction.status {
+        case "pending":
+            return .orange
+        case "completed":
+            return .green
+        default:
+            return .secondary
+        }
+    }
+
+    private var typeIcon: String {
+        switch transaction.type {
+        case "receipt":
+            return "receipt"
+        case "manual":
+            return "plus.circle"
+        default:
+            return "doc"
+        }
+    }
+
+    var body: some View {
+        Button(action: {
+            // Navigate to transaction details
+        }) {
+            VStack(spacing: 16) {
+                HStack(spacing: 16) {
+                    // Type Icon
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(.blue.opacity(0.1))
+                            .frame(width: 48, height: 48)
+
+                        Image(systemName: typeIcon)
+                            .font(.system(size: 20, weight: .medium))
+                            .foregroundColor(.blue)
+>>>>>>> 6f95081 (Add multi-currency support (SAR/USD) and fix transaction status display)
                     }
 
                     Button(action: { showingExportOptions = true }) {
@@ -279,12 +377,20 @@ struct HistoryView: View {
 
                             Spacer()
 
+<<<<<<< HEAD
                             Button(action: {
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                     selectedFilter = "All"
                                     dateRange = .all
                                 }
                             }) {
+=======
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(currencyManager.format(amount: transaction.yourShare))
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.primary)
+
+>>>>>>> 6f95081 (Add multi-currency support (SAR/USD) and fix transaction status display)
                                 HStack(spacing: 4) {
                                     Image(systemName: "xmark.circle.fill")
                                         .font(.system(size: 14))

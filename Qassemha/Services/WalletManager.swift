@@ -120,12 +120,15 @@ class WalletManager: ObservableObject {
             .reduce(0.0) { $0 + $1.amount }
     }
 
+<<<<<<< HEAD
     // MARK: - Transaction Retrieval
 
     func getAllTransactions() -> [TransactionModel] {
         return transactions
     }
 
+=======
+>>>>>>> 6f95081 (Add multi-currency support (SAR/USD) and fix transaction status display)
     // MARK: - Wallet Operations
 
     func addFunds(amount: Double, paymentMethod: PaymentMethodModel, completion: @escaping (Result<TransactionModel, Error>) -> Void) {
