@@ -26,6 +26,8 @@ struct SignupView: View {
         case fullName, email, phoneNumber, password, confirmPassword
     }
 
+    /// Formats phone number input with proper US/international formatting
+    /// Supports both US format (###) ###-#### and international format with country code
     private func formatPhoneNumber(_ input: String) -> String {
         let cleanNumber = input.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
 
@@ -74,12 +76,16 @@ struct SignupView: View {
         return result
     }
 
+    /// Validates phone number format for US and international numbers
+    /// Ensures phone number has correct digit count for registration
     private func isValidPhoneNumber(_ phoneNumber: String) -> Bool {
         let cleanNumber = phoneNumber.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
         // Support US format (10 digits) or international format (11-15 digits with country code)
         return cleanNumber.count == 10 || (cleanNumber.count >= 11 && cleanNumber.count <= 15)
     }
 
+    /// Saves new user data to Core Data storage
+    /// Creates User entity with trimmed/formatted data and auto-login on success
     private func saveUserData() {
         let newUser = User(context: viewContext)
         newUser.userID = UUID()
@@ -535,10 +541,14 @@ struct SignupView: View {
         }
     }
 
+    /// Checks if password and confirm password fields match
+    /// Provides real-time validation feedback for password entry
     private var passwordsMatch: Bool {
         password == confirmPassword
     }
 
+    /// Validates entire signup form for completeness and correctness
+    /// Ensures all required fields meet validation criteria before submission
     private var isFormValid: Bool {
         !fullName.isEmpty &&
         !email.isEmpty &&

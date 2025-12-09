@@ -68,11 +68,15 @@ class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    /// Initializes CameraManager and checks camera authorization status
+    /// Ensures camera permissions are verified before attempting to use camera hardware
     override init() {
         super.init()
         checkCameraAuthorization()
     }
 
+    /// Checks current camera authorization status and requests permission if not determined
+    /// Updates published authorization state for UI binding and feature gating
     func checkCameraAuthorization() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
@@ -86,6 +90,8 @@ class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    /// Requests camera access permission from user with system dialog
+    /// Updates authorization state on main thread for immediate UI response
     private func requestCameraPermission() {
         AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in
             DispatchQueue.main.async {
@@ -97,6 +103,8 @@ class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    /// Starts camera capture session on background queue for smooth UI performance
+    /// Reuses existing configured session if available for faster startup
     func startSession() {
         sessionQueue.async { [weak self] in
             guard let self = self else { return }
@@ -219,6 +227,8 @@ class CameraManager: NSObject, ObservableObject {
         session.startRunning()
     }
 
+    /// Captures photo with current flash settings and delegates processing to photo output
+    /// Sets processing state to provide UI feedback during capture operation
     func capturePhoto() {
         guard let photoOutput = photoOutput else { return }
 
@@ -250,6 +260,8 @@ class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    /// Processes captured image for both text recognition and barcode detection
+    /// Runs OCR and barcode scanning in parallel on background thread for efficiency
     func processImage(_ image: UIImage) {
         print("📷 Starting image processing...")
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -258,6 +270,8 @@ class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    /// Performs Vision framework text recognition on image with receipt-optimized settings
+    /// Preprocesses image and uses accurate recognition level for high-quality OCR results
     private func performTextRecognition(on image: UIImage) {
         guard let cgImage = image.cgImage else {
             DispatchQueue.main.async { [weak self] in
@@ -362,6 +376,8 @@ class CameraManager: NSObject, ObservableObject {
         }
     }
 
+    /// Applies image preprocessing filters to enhance text readability for OCR
+    /// Converts to grayscale, increases contrast, and sharpens for better recognition accuracy
     private func preprocessImageForOCR(_ cgImage: CGImage) -> CGImage {
         let context = CIContext()
         let ciImage = CIImage(cgImage: cgImage)

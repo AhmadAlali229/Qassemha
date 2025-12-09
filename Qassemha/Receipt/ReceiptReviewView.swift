@@ -377,6 +377,8 @@ struct ReceiptReviewView: View {
         }
     }
 
+    /// Saves the receipt to Core Data with selected category
+    /// Shows success feedback and auto-dismisses view after 2 seconds
     private func saveReceipt() {
         // Show saving state immediately
         withAnimation {
@@ -409,6 +411,8 @@ struct ReceiptReviewView: View {
         }
     }
 
+    /// Checks if receipt is already saved in database
+    /// Runs on background thread to avoid blocking UI
     private func checkIfSaved() async {
         // Check on background thread
         let saved = await Task.detached(priority: .userInitiated) {
@@ -422,6 +426,8 @@ struct ReceiptReviewView: View {
         }
     }
 
+    /// Deletes the receipt from Core Data
+    /// Shows deleting animation and dismisses view on completion
     private func deleteReceipt() {
         // Show deleting state immediately
         withAnimation(.easeInOut(duration: 0.2)) {

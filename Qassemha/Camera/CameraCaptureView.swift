@@ -17,6 +17,8 @@ struct CameraCaptureView: View {
     @State private var showingPermissionAlert = false
     @State private var zoomFactor: CGFloat = 1.0
 
+    /// Initializes camera capture view with optional camera manager and binding for receipt output
+    /// Allows dependency injection of camera manager for testing while providing default instance
     init(cameraManager: CameraManager? = nil, isPresented: Binding<Bool>, capturedReceipt: Binding<Receipt?>) {
         self.cameraManager = cameraManager ?? CameraManager()
         self._isPresented = isPresented
@@ -363,6 +365,8 @@ struct CameraCaptureView: View {
         }
     }
 
+    /// Processes detected QR code by parsing receipt data or handling URL
+    /// Attempts to extract receipt information from QR code and dismisses view on success
     private func processQRCode(_ qrCode: QRCodeData) {
         // Check if QR code contains receipt data (JSON format)
         if let receiptData = parseReceiptFromQRCode(qrCode.value) {
@@ -463,6 +467,8 @@ struct CameraCaptureView: View {
         return nil
     }
 
+    /// Parses QR code string to extract receipt data from database or JSON format
+    /// Supports hardcoded demo receipts and generic JSON receipt structures for flexibility
     private func parseReceiptFromQRCode(_ qrString: String) -> Receipt? {
         // First, check if the QR code exists in the database
         if let receipt = ReceiptDataService.shared.fetchReceipt(forQRCode: qrString) {
@@ -558,6 +564,8 @@ struct CameraCaptureView: View {
         return nil
     }
 
+    /// Processes OCR text from scanned image into receipt object with items and totals
+    /// Creates receipt from parsed text or basic structure if parsing fails for graceful fallback
     private func processScannedReceipt(image: UIImage, text: String) {
         // Convert image to data
         let imageData = image.jpegData(compressionQuality: 0.8)

@@ -30,10 +30,14 @@ struct NewPasswordView: View {
         case newPassword, confirmPassword
     }
 
+    /// Checks if password is not empty
+    /// Basic password validation for password reset flow
     private func isValidPassword(_ password: String) -> Bool {
         return !password.isEmpty
     }
 
+    /// Validates both password fields meet requirements and match
+    /// Ensures password confirmation matches and provides specific error messages
     private func validatePasswords() -> Bool {
         passwordError = ""
         confirmPasswordError = ""

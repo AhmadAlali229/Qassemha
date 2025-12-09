@@ -16,6 +16,8 @@ class ReceiptDataService {
 
     // MARK: - Seed Hardcoded QR Receipts (DEPRECATED - Now using on-demand creation)
 
+    /// Deprecated method that previously seeded hardcoded QR receipts into database
+    /// Receipts are now created on-demand when QR codes are scanned for better efficiency
     func seedHardcodedQRReceipts() {
         // DEPRECATED: This function is no longer used
         // Receipts are now created on-demand when QR codes are scanned
@@ -24,6 +26,8 @@ class ReceiptDataService {
 
     // MARK: - Clean Up Previously Seeded Receipts
 
+    /// Removes previously seeded receipts from database during migration to on-demand system
+    /// Runs once to clean up old data and prevent duplicate receipts
     func cleanupSeededReceipts() {
         // Only run cleanup once
         if UserDefaults.standard.bool(forKey: "hasCleanedSeededReceipts") {
@@ -76,6 +80,8 @@ class ReceiptDataService {
 
     // MARK: - Fetch Receipt by QR Code
 
+    /// Fetches receipt from database by QR code or creates it on-demand if hardcoded
+    /// Enables seamless QR code scanning experience with automatic receipt creation
     func fetchReceipt(forQRCode qrCode: String) -> Receipt? {
         // First check if it exists in database
         let fetchRequest: NSFetchRequest<QRCodeReceipt> = QRCodeReceipt.fetchRequest()
@@ -98,6 +104,8 @@ class ReceiptDataService {
 
     // MARK: - Create Receipt for Hardcoded QR (On-Demand)
 
+    /// Creates receipt object for hardcoded QR codes on first scan
+    /// Supports demo receipts for testing without requiring actual QR code generation service
     private func createReceiptForHardcodedQR(_ qrCode: String) -> Receipt? {
         let taqwarmaQR = "ARZTaGF3YXJtYSBIb3VzZSBDb21wYW55Ag8zMTA0NjQ5MDEyMDAwMDMDFDIwMjUtMTAtMDUgMTU6Mzk6MjFaBAYxNjcuMDAFBTIxLjc4"
         let taqatuHamamQR = "ATzZhdit2YQg2KrZgtin2LfZiti5INmI2K3Zhdin2YUg2YTZhNiq2KzYp9ix2YcgLSDYp9mE2YHYsdi5IDMCDzMwMDcwNTUyMTgwMDAwMwMUMjAyNS0wOS0zMFQyMDowNDowNVoEAzE1OAUFMjAuNjI="
@@ -122,6 +130,8 @@ class ReceiptDataService {
 
     // MARK: - Check if QR Code Exists
 
+    /// Checks if QR code exists in database or matches hardcoded demo receipts
+    /// Prevents duplicate receipt creation and validates QR codes before processing
     func qrCodeExists(_ qrCode: String) -> Bool {
         // Check database first
         let fetchRequest: NSFetchRequest<QRCodeReceipt> = QRCodeReceipt.fetchRequest()
@@ -145,6 +155,8 @@ class ReceiptDataService {
 
     // MARK: - Save Receipt with QR Code
 
+    /// Saves receipt and associated QR code to Core Data for future lookups
+    /// Links QR code to receipt for instant retrieval on subsequent scans
     func saveReceiptWithQR(receipt: Receipt, qrCode: String) {
         // Create StoredReceipt entity
         let storedReceipt = StoredReceipt(context: context)
@@ -197,6 +209,8 @@ class ReceiptDataService {
 
     // MARK: - Convert StoredReceipt to Receipt
 
+    /// Converts Core Data StoredReceipt entity to Receipt model for app use
+    /// Transforms persisted data into usable business objects with proper type mapping
     private func convertToReceipt(_ storedReceipt: StoredReceipt) -> Receipt? {
         guard let receiptID = storedReceipt.receiptID,
               let storeName = storedReceipt.storeName,
@@ -256,6 +270,8 @@ class ReceiptDataService {
 
     // MARK: - Hardcoded Receipt Creators
 
+    /// Creates hardcoded Taqwarma House receipt with predefined items and totals
+    /// Provides demo receipt for testing bill splitting and payment features
     private func createTaqwarmaHouseReceipt() -> Receipt {
         let items = [
             ReceiptItem(
@@ -336,6 +352,8 @@ class ReceiptDataService {
         return receipt
     }
 
+    /// Creates hardcoded Taqatu Hamam grocery receipt with Arabic item names
+    /// Demonstrates multi-language support and diverse item categories
     private func createTaqatuHamamReceipt() -> Receipt {
         let items = [
             ReceiptItem(

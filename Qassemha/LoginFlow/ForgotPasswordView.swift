@@ -28,6 +28,8 @@ struct ForgotPasswordView: View {
         case email, phoneNumber
     }
 
+    /// Formats phone number with US standard (###) ###-#### format
+    /// Removes non-numeric characters and applies mask for consistent display
     private func formatPhoneNumber(_ input: String) -> String {
         let cleanNumber = input.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
 
@@ -47,11 +49,15 @@ struct ForgotPasswordView: View {
         return result
     }
 
+    /// Validates phone number has exactly 10 digits
+    /// Required for sending password reset code via SMS
     private func isValidPhoneNumber(_ phoneNumber: String) -> Bool {
         let cleanNumber = phoneNumber.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
         return cleanNumber.count == 10
     }
 
+    /// Validates email format using regex pattern
+    /// Ensures email meets standard format requirements for password reset
     private func isValidEmail(_ email: String) -> Bool {
         let emailRegEx = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
         let emailPred = NSPredicate(format:"SELF MATCHES %@", emailRegEx)

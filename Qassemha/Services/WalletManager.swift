@@ -22,12 +22,16 @@ class WalletManager: ObservableObject {
     private let context = PersistenceController.shared.container.viewContext
     private let authManager = AuthenticationManager.shared
 
+    /// Initializes singleton WalletManager and loads user's wallet data
+    /// Ensures wallet state is ready when app launches for immediate display
     private init() {
         loadWalletData()
     }
 
     // MARK: - Data Loading
 
+    /// Loads all wallet-related data for current user including balance, transactions, and payment records
+    /// Central method that initializes complete wallet state from Core Data
     func loadWalletData() {
         guard let userEmail = authManager.currentUserEmail else { return }
 
@@ -38,6 +42,8 @@ class WalletManager: ObservableObject {
         calculateBalances(for: userEmail)
     }
 
+    /// Fetches user's wallet balance from Core Data or creates new wallet if none exists
+    /// Ensures every user has a wallet initialized to zero on first use
     private func loadWalletBalance(for userID: String) {
         let request: NSFetchRequest<WalletBalance> = WalletBalance.fetchRequest()
         request.predicate = NSPredicate(format: "userID == %@", userID)
@@ -55,6 +61,8 @@ class WalletManager: ObservableObject {
         }
     }
 
+    /// Creates new wallet entity in Core Data for user with zero balance
+    /// Initializes wallet with default currency from CurrencyManager
     private func createWallet(for userID: String) {
         let wallet = WalletBalance(context: context)
         wallet.walletID = UUID()
@@ -67,6 +75,8 @@ class WalletManager: ObservableObject {
         walletBalance = 0.0
     }
 
+    /// Loads transaction history for user sorted by creation date descending
+    /// Converts Core Data entities to view models for UI display
     private func loadTransactions(for userID: String) {
         let request: NSFetchRequest<Transaction> = Transaction.fetchRequest()
         request.predicate = NSPredicate(format: "userID == %@", userID)
@@ -80,6 +90,8 @@ class WalletManager: ObservableObject {
         }
     }
 
+    /// Loads saved payment methods for user sorted by default status and creation date
+    /// Enables quick access to user's preferred payment options
     private func loadPaymentMethods(for userID: String) {
         let request: NSFetchRequest<PaymentMethod> = PaymentMethod.fetchRequest()
         request.predicate = NSPredicate(format: "userID == %@", userID)
@@ -128,6 +140,8 @@ class WalletManager: ObservableObject {
 
     // MARK: - Wallet Operations
 
+    /// Adds funds to user's wallet using specified payment method with async processing
+    /// Creates transaction record and updates wallet balance on successful completion
     func addFunds(amount: Double, paymentMethod: PaymentMethodModel, completion: @escaping (Result<TransactionModel, Error>) -> Void) {
         guard let userID = authManager.currentUserEmail else {
             completion(.failure(WalletError.userNotFound))
@@ -157,6 +171,8 @@ class WalletManager: ObservableObject {
         }
     }
 
+    /// Withdraws funds from wallet after verifying sufficient balance
+    /// Prevents overdraft by checking balance before processing withdrawal transaction
     func withdrawFunds(amount: Double, completion: @escaping (Result<TransactionModel, Error>) -> Void) {
         guard let userID = authManager.currentUserEmail else {
             completion(.failure(WalletError.userNotFound))
@@ -355,6 +371,8 @@ class WalletManager: ObservableObject {
 
     // MARK: - Payment Record Management
 
+    /// Creates payment record for bill split and schedules reminder notifications if due date set
+    /// Links payer to payee with amount and optional due date for tracking payment obligations
     func createPaymentRecord(
         billSplitID: String,
         payerUserID: String,
@@ -412,6 +430,8 @@ class WalletManager: ObservableObject {
         return model
     }
 
+    /// Processes payment for a bill split record using specified payment method
+    /// Handles wallet balance verification, transaction creation, and notification cancellation on success
     func processPayment(
         recordID: UUID,
         paymentMethod: String,

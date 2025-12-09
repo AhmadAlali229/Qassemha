@@ -17,6 +17,8 @@ struct Participant: Identifiable, Codable, Equatable, Hashable {
     var email: String?
     var avatarColor: String
 
+    /// Initializes a new participant with contact information and visual representation
+    /// Creates a unique participant for bill splitting with default blue avatar color
     init(id: UUID = UUID(), name: String, phoneNumber: String? = nil, email: String? = nil, avatarColor: String = "#007AFF") {
         self.id = id
         self.name = name
@@ -25,10 +27,14 @@ struct Participant: Identifiable, Codable, Equatable, Hashable {
         self.avatarColor = avatarColor
     }
 
+    /// Combines the participant's ID into the hasher for efficient set/dictionary operations
+    /// Ensures participants can be uniquely identified in collections
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
 
+    /// Compares two participants based solely on their unique ID
+    /// Ensures participants are considered equal only when they have the same ID
     static func == (lhs: Participant, rhs: Participant) -> Bool {
         lhs.id == rhs.id
     }
@@ -42,6 +48,8 @@ enum SplitType: String, CaseIterable, Codable {
     case percentage = "By Percentage"
     case custom = "Custom Amount"
 
+    /// Returns the SF Symbol icon name for each split type
+    /// Provides visual representation for UI display
     var icon: String {
         switch self {
         case .equal: return "equal.circle"
@@ -51,6 +59,8 @@ enum SplitType: String, CaseIterable, Codable {
         }
     }
 
+    /// Returns a user-friendly description of how the split type works
+    /// Helps users understand the splitting method before selecting it
     var description: String {
         switch self {
         case .equal: return "Split total equally among all participants"
@@ -70,6 +80,8 @@ struct ItemAssignment: Identifiable, Codable, Equatable {
     var splitType: ItemSplitType
     var customSplits: [UUID: Double]  // For percentage or custom amount splits
 
+    /// Initializes an item assignment for a specific receipt item
+    /// Links receipt items to participants for granular bill splitting
     init(id: UUID = UUID(), itemId: UUID, participants: [UUID] = [], splitType: ItemSplitType = .equal, customSplits: [UUID: Double] = [:]) {
         self.id = id
         self.itemId = itemId
@@ -98,6 +110,8 @@ struct ParticipantSplit: Identifiable, Codable, Equatable {
     var customPercentage: Double?  // For percentage-based splits
     var customAmount: Double?  // For custom amount splits
 
+    /// Initializes a split calculation for a specific participant
+    /// Tracks the participant's share of subtotal, tax, tip, and total amounts
     init(id: UUID = UUID(), participantId: UUID, subtotal: Double = 0, taxAmount: Double = 0, tipAmount: Double = 0, total: Double = 0, itemsAssigned: [UUID] = [], customPercentage: Double? = nil, customAmount: Double? = nil) {
         self.id = id
         self.participantId = participantId
@@ -132,6 +146,8 @@ struct SplitConfiguration: Identifiable, Codable, Equatable {
     var createdAt: Date
     var updatedAt: Date
 
+    /// Initializes a complete split configuration for a receipt
+    /// Creates a comprehensive bill splitting setup with payment tracking and reminders
     init(id: UUID = UUID(), receiptId: UUID, splitType: SplitType = .equal, participants: [Participant] = [], itemAssignments: [ItemAssignment] = [], participantSplits: [ParticipantSplit] = [], includeTax: Bool = true, includeTip: Bool = true, excludedParticipants: [UUID] = [], paidParticipants: [UUID] = [], paidItems: [UUID: Set<UUID>] = [:], adminId: UUID? = nil, dueDate: Date? = nil, reminderSchedule: String? = nil, notes: String? = nil, createdAt: Date = Date(), updatedAt: Date = Date()) {
         self.id = id
         self.receiptId = receiptId
@@ -152,11 +168,14 @@ struct SplitConfiguration: Identifiable, Codable, Equatable {
         self.updatedAt = updatedAt
     }
 
-    // Convenience computed properties
+    /// Returns the total number of participants in the split
+    /// Provides a quick count for UI display
     var totalParticipants: Int {
         participants.count
     }
 
+    /// Returns only participants who are actively included in the split
+    /// Filters out participants who have been excluded from specific calculations
     var activeParticipants: [Participant] {
         participants.filter { !excludedParticipants.contains($0.id) }
     }
@@ -169,6 +188,8 @@ enum TaxTipDistribution: String, CaseIterable, Codable {
     case equal = "Equal Split"
     case none = "None"
 
+    /// Returns a description of how tax/tip will be distributed
+    /// Explains the distribution method to users for informed decision-making
     var description: String {
         switch self {
         case .proportional: return "Based on each person's subtotal"
@@ -191,6 +212,8 @@ struct SplitSummary: Identifiable {
     var items: [ReceiptItem]
     var isPaid: Bool
 
+    /// Initializes a split summary for a participant
+    /// Aggregates all financial data and items for a single participant's share
     init(participant: Participant, itemsCount: Int = 0, subtotal: Double = 0, tax: Double = 0, tip: Double = 0, total: Double = 0, items: [ReceiptItem] = [], isPaid: Bool = false) {
         self.participant = participant
         self.itemsCount = itemsCount

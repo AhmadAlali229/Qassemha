@@ -16,6 +16,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
 
     private let notificationCenter = UNUserNotificationCenter.current()
 
+    /// Initializes the singleton NotificationManager and sets up notification delegate
+    /// Ensures notification permissions are checked on creation to prevent unauthorized access
     private override init() {
         super.init()
         notificationCenter.delegate = self
@@ -24,6 +26,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
 
     // MARK: - Permission Management
 
+    /// Requests notification permission from the user with alert, badge, and sound options
+    /// Provides callback with granted status to enable immediate UI updates and feature gating
     func requestNotificationPermission(completion: @escaping (Bool) -> Void) {
         notificationCenter.requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             DispatchQueue.main.async {
@@ -38,6 +42,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         }
     }
 
+    /// Checks current notification authorization status and updates published property
+    /// Allows app to determine if notification features should be enabled without prompting user
     func checkNotificationPermission() {
         notificationCenter.getNotificationSettings { settings in
             DispatchQueue.main.async {
@@ -48,6 +54,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
 
     // MARK: - Payment Reminders
 
+    /// Schedules local notifications for payment reminders based on due date and schedule type
+    /// Supports multiple reminder times and includes payment details for user context
     func schedulePaymentReminder(
         paymentRecordID: UUID,
         payeeName: String,
@@ -107,6 +115,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         }
     }
 
+    /// Schedules immediate notification for overdue payments with critical alert sound
+    /// Emphasizes urgency by showing how many days past due and using critical sound
     func scheduleOverduePaymentReminder(
         paymentRecordID: UUID,
         payeeName: String,
@@ -150,6 +160,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         }
     }
 
+    /// Cancels all pending notification reminders associated with a specific payment record
+    /// Prevents unnecessary notifications when payment is completed or cancelled
     func cancelPaymentReminders(for paymentRecordID: UUID) {
         notificationCenter.getPendingNotificationRequests { requests in
             let identifiersToRemove = requests
@@ -161,12 +173,16 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         }
     }
 
+    /// Removes all pending payment reminder notifications from the notification center
+    /// Useful for resetting notification state or when user logs out
     func cancelAllPaymentReminders() {
         notificationCenter.removeAllPendingNotificationRequests()
     }
 
     // MARK: - Helper Methods
 
+    /// Calculates notification dates based on due date and reminder schedule type
+    /// Preserves user-selected time of day for reminders to match their preferences
     private func calculateNotificationDates(from dueDate: Date, schedule: ReminderSchedule) -> [Date] {
         var dates: [Date] = []
         let calendar = Calendar.current
@@ -223,6 +239,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
 
     // MARK: - Overdue Payment Scanning
 
+    /// Scans wallet payment records for overdue payments and schedules escalating reminders
+    /// Sends reminders every 3 days for overdue payments to ensure they're not forgotten
     func checkForOverduePayments() {
         let walletManager = WalletManager.shared
         let calendar = Calendar.current
@@ -252,6 +270,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
 
     // MARK: - Notification Actions
 
+    /// Configures notification action buttons for payment reminders (Pay Now, Snooze)
+    /// Allows users to interact with notifications without opening the app
     func setupNotificationActions() {
         // Pay Now action
         let payNowAction = UNNotificationAction(
@@ -288,6 +308,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
 
     // MARK: - Badge Management
 
+    /// Updates app icon badge to show number of pending payments
+    /// Provides at-a-glance visibility of outstanding payment obligations
     func updateBadgeCount() {
         let walletManager = WalletManager.shared
         let pendingCount = walletManager.paymentRecords.filter { $0.status == "pending" }.count
@@ -297,6 +319,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         }
     }
 
+    /// Clears the app icon badge count to zero
+    /// Used when all payments are completed or user manually clears notifications
     func clearBadge() {
         DispatchQueue.main.async {
             UNUserNotificationCenter.current().setBadgeCount(0)
@@ -305,6 +329,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
 
     // MARK: - UNUserNotificationCenterDelegate
 
+    /// Determines how notifications are displayed when app is in foreground
+    /// Shows banner, sound, and badge even when app is active for better user awareness
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -314,6 +340,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         completionHandler([.banner, .sound, .badge])
     }
 
+    /// Handles user interaction with notification actions (Pay Now, Snooze, tap)
+    /// Processes action identifiers and performs corresponding operations like rescheduling or navigation
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -388,6 +416,8 @@ struct NotificationPreferences: Codable {
     var soundEnabled: Bool = true
     var badgeEnabled: Bool = true
 
+    /// Loads notification preferences from UserDefaults or returns default values
+    /// Provides persistence of user notification settings across app sessions
     static func load() -> NotificationPreferences {
         guard let data = UserDefaults.standard.data(forKey: "notificationPreferences"),
               let preferences = try? JSONDecoder().decode(NotificationPreferences.self, from: data) else {
@@ -396,6 +426,8 @@ struct NotificationPreferences: Codable {
         return preferences
     }
 
+    /// Saves current notification preferences to UserDefaults
+    /// Ensures user settings persist across app launches and device restarts
     func save() {
         if let data = try? JSONEncoder().encode(self) {
             UserDefaults.standard.set(data, forKey: "notificationPreferences")

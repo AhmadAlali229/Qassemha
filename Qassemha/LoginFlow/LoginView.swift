@@ -27,6 +27,8 @@ struct LoginView: View {
         case email, phoneNumber, password
     }
 
+    /// Formats phone number input with proper US/international formatting
+    /// Supports both US format (###) ###-#### and international format with country code
     private func formatPhoneNumber(_ input: String) -> String {
         let cleanNumber = input.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
 
@@ -75,12 +77,16 @@ struct LoginView: View {
         return result
     }
 
+    /// Validates phone number format for US and international numbers
+    /// Ensures phone number has correct digit count for authentication
     private func isValidPhoneNumber(_ phoneNumber: String) -> Bool {
         let cleanNumber = phoneNumber.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
         // Support US format (10 digits) or international format (11-15 digits with country code)
         return cleanNumber.count == 10 || (cleanNumber.count >= 11 && cleanNumber.count <= 15)
     }
 
+    /// Validates user credentials and performs login authentication
+    /// Checks user existence first, then validates password for better error messages
     private func validateAndLogin() {
         isLoggingIn = true
         errorMessage = ""
