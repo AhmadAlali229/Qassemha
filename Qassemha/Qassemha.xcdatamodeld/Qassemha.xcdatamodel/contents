@@ -35,11 +35,50 @@
         <relationship name="contact" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="Contact" inverseName="groupMemberships" inverseEntity="Contact"/>
         <relationship name="group" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="SavedGroup" inverseName="members" inverseEntity="SavedGroup"/>
     </entity>
+    <entity name="StoredReceipt" representedClassName="StoredReceipt" syncable="YES" codeGenerationType="class">
+        <attribute name="receiptID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="storeName" optional="NO" attributeType="String"/>
+        <attribute name="storeAddress" optional="YES" attributeType="String"/>
+        <attribute name="date" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="subtotal" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="tax" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="tip" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="total" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="currency" optional="NO" attributeType="String" defaultValueString="USD"/>
+        <attribute name="receiptNumber" optional="YES" attributeType="String"/>
+        <attribute name="imageData" optional="YES" attributeType="Binary"/>
+        <attribute name="scanType" optional="NO" attributeType="String"/>
+        <attribute name="category" optional="NO" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="items" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="StoredReceiptItem" inverseName="receipt" inverseEntity="StoredReceiptItem"/>
+        <relationship name="qrCodes" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="QRCodeReceipt" inverseName="receipt" inverseEntity="QRCodeReceipt"/>
+    </entity>
+    <entity name="StoredReceiptItem" representedClassName="StoredReceiptItem" syncable="YES" codeGenerationType="class">
+        <attribute name="itemID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="name" optional="NO" attributeType="String"/>
+        <attribute name="quantity" optional="NO" attributeType="Double" defaultValueString="1.0" usesScalarValueType="YES"/>
+        <attribute name="unitPrice" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="totalPrice" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="category" optional="NO" attributeType="String"/>
+        <attribute name="tags" optional="YES" attributeType="String"/>
+        <attribute name="notes" optional="YES" attributeType="String"/>
+        <attribute name="isEdited" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <relationship name="receipt" optional="NO" maxCount="1" deletionRule="Nullify" destinationEntity="StoredReceipt" inverseName="items" inverseEntity="StoredReceipt"/>
+    </entity>
+    <entity name="QRCodeReceipt" representedClassName="QRCodeReceipt" syncable="YES" codeGenerationType="class">
+        <attribute name="qrCodeID" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="qrCodeString" optional="NO" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="receipt" optional="NO" maxCount="1" deletionRule="Cascade" destinationEntity="StoredReceipt" inverseName="qrCodes" inverseEntity="StoredReceipt"/>
+    </entity>
     <elements>
         <element name="Item" positionX="-63" positionY="-18" width="128" height="44"/>
         <element name="User" positionX="-45" positionY="63" width="128" height="104"/>
         <element name="Contact" positionX="-54" positionY="108" width="128" height="134"/>
         <element name="SavedGroup" positionX="-36" positionY="126" width="128" height="149"/>
         <element name="GroupMember" positionX="-18" positionY="144" width="128" height="74"/>
+        <element name="StoredReceipt" positionX="0" positionY="162" width="128" height="269"/>
+        <element name="StoredReceiptItem" positionX="18" positionY="180" width="128" height="179"/>
+        <element name="QRCodeReceipt" positionX="36" positionY="198" width="128" height="89"/>
     </elements>
 </model>

@@ -388,16 +388,25 @@ struct CameraCaptureView: View {
     }
 
     private func parseReceiptFromQRCode(_ qrString: String) -> Receipt? {
-        // Check for specific ZATCA (Saudi) QR codes
-        let taqwarmaQR = "ARZTaGF3YXJtYSBIb3VzZSBDb21wYW55Ag8zMTA0NjQ5MDEyMDAwMDMDFDIwMjUtMTAtMDUgMTU6Mzk6MjFaBAYxNjcuMDAFBTIxLjc4"
-        let taqatuHamamQR = "ATzZhdit2YQg2KrZgtin2LfZiti5INmI2K3Zhdin2YUg2YTZhNiq2KzYp9ix2YcgLSDYp9mE2YHYsdi5IDMCDzMwMDcwNTUyMTgwMDAwMwMUMjAyNS0wOS0zMFQyMDowNDowNVoEAzE1OAUFMjAuNjI="
-
-        if qrString == taqwarmaQR || qrString.contains("aGF3YXJtYSBIb3VzZSBDb21wYW55") {
-            return createTaqwarmaHouseReceipt()
+        // First, check if the QR code exists in the database
+        if let receipt = ReceiptDataService.shared.fetchReceipt(forQRCode: qrString) {
+            print("✅ Found receipt in database for QR code: \(receipt.storeName)")
+            return receipt
         }
 
-        if qrString == taqatuHamamQR || qrString.contains("2KrZgtin2LfZiti5INmI2K3Zhdin2YU") {
-            return createTaqatuHamamReceipt()
+        // Check for partial matches (for backward compatibility)
+        if qrString.contains("aGF3YXJtYSBIb3VzZSBDb21wYW55") {
+            let taqwarmaQR = "ARZTaGF3YXJtYSBIb3VzZSBDb21wYW55Ag8zMTA0NjQ5MDEyMDAwMDMDFDIwMjUtMTAtMDUgMTU6Mzk6MjFaBAYxNjcuMDAFBTIxLjc4"
+            if let receipt = ReceiptDataService.shared.fetchReceipt(forQRCode: taqwarmaQR) {
+                return receipt
+            }
+        }
+
+        if qrString.contains("2KrZgtin2LfZiti5INmI2K3Zhdin2YU") {
+            let taqatuHamamQR = "ATzZhdit2YQg2KrZgtin2LfZiti5INmI2K3Zhdin2YUg2YTZhNiq2KzYp9ix2YcgLSDYp9mE2YHYsdi5IDMCDzMwMDcwNTUyMTgwMDAwMwMUMjAyNS0wOS0zMFQyMDowNDowNVoEAzE1OAUFMjAuNjI="
+            if let receipt = ReceiptDataService.shared.fetchReceipt(forQRCode: taqatuHamamQR) {
+                return receipt
+            }
         }
 
         // Try to parse as JSON receipt data
@@ -459,192 +468,6 @@ struct CameraCaptureView: View {
         }
 
         return nil
-    }
-
-    private func createTaqwarmaHouseReceipt() -> Receipt {
-        let items = [
-            ReceiptItem(
-                name: "Mix Chicken Shawarma Rice",
-                quantity: 1.0,
-                unitPrice: 23.00,
-                totalPrice: 23.00,
-                category: .main,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "Honey BBQ Sauce",
-                quantity: 1.0,
-                unitPrice: 3.00,
-                totalPrice: 3.00,
-                category: .side,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "Roll Nashville",
-                quantity: 1.0,
-                unitPrice: 12.00,
-                totalPrice: 12.00,
-                category: .food,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "Smoky House Box (no tomato)",
-                quantity: 2.0,
-                unitPrice: 39.00,
-                totalPrice: 78.00,
-                category: .main,
-                tags: [],
-                notes: "no tomato"
-            ),
-            ReceiptItem(
-                name: "Soft Drinks (Pepsi Diet Can)",
-                quantity: 3.0,
-                unitPrice: 6.00,
-                totalPrice: 18.00,
-                category: .beverage,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "Strips Nashville Box",
-                quantity: 1.0,
-                unitPrice: 33.00,
-                totalPrice: 33.00,
-                category: .main,
-                tags: [],
-                notes: "potato, lollo, BBQ sauce, dipper"
-            )
-        ]
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        dateFormatter.timeZone = TimeZone(identifier: "Asia/Riyadh")
-        let receiptDate = dateFormatter.date(from: "2025-10-05 15:02:04") ?? Date()
-
-        let receipt = Receipt(
-            storeName: "All Alhussain",
-            storeAddress: nil,
-            date: receiptDate,
-            items: items,
-            subtotal: 145.22,
-            tax: 21.78,
-            tip: 0,
-            total: 167.00,
-            currency: "﷼",
-            receiptNumber: "310464901200003",
-            imageData: nil,
-            scanType: .qrCode,
-            category: .food
-        )
-
-        return receipt
-    }
-
-    private func createTaqatuHamamReceipt() -> Receipt {
-        let items = [
-            ReceiptItem(
-                name: "حمام فرنسي روز جامبو",
-                quantity: 2.0,
-                unitPrice: 36.00,
-                totalPrice: 72.00,
-                category: .food,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "غاز 500 جرام",
-                quantity: 2.0,
-                unitPrice: 15.00,
-                totalPrice: 30.00,
-                category: .food,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "لبن النرجس 900جم",
-                quantity: 1.0,
-                unitPrice: 9.00,
-                totalPrice: 9.00,
-                category: .beverage,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "صاصه البصل المحمص",
-                quantity: 1.0,
-                unitPrice: 12.00,
-                totalPrice: 12.00,
-                category: .food,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "زيت الزيتون الجوف 250مل",
-                quantity: 1.0,
-                unitPrice: 16.00,
-                totalPrice: 16.00,
-                category: .food,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "خضار مقطعة",
-                quantity: 10.0,
-                unitPrice: 1.00,
-                totalPrice: 10.00,
-                category: .food,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "صحن سلطة وسط",
-                quantity: 1.0,
-                unitPrice: 2.00,
-                totalPrice: 2.00,
-                category: .food,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "بهارات 50 غرام",
-                quantity: 1.0,
-                unitPrice: 1.00,
-                totalPrice: 1.00,
-                category: .food,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "زبدة المراعي 10 جرام",
-                quantity: 1.0,
-                unitPrice: 1.00,
-                totalPrice: 1.00,
-                category: .food,
-                tags: []
-            ),
-            ReceiptItem(
-                name: "صحن بلاستيك رقم 1",
-                quantity: 1.0,
-                unitPrice: 5.00,
-                totalPrice: 5.00,
-                category: .other,
-                tags: []
-            )
-        ]
-
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
-        dateFormatter.timeZone = TimeZone(identifier: "Asia/Riyadh")
-        let receiptDate = dateFormatter.date(from: "2025-09-30T20:04:05Z") ?? Date()
-
-        let receipt = Receipt(
-            storeName: "محل تقاطع وحمام للتجارة - الفرع 3",
-            storeAddress: "Riyadh, حي الهدية – شارع القلم",
-            date: receiptDate,
-            items: items,
-            subtotal: 137.38,
-            tax: 20.62,
-            tip: 0,
-            total: 158.00,
-            currency: "﷼",
-            receiptNumber: "300705521800003",
-            imageData: nil,
-            scanType: .qrCode,
-            category: .groceries
-        )
-
-        return receipt
     }
 
     private func processScannedReceipt(image: UIImage, text: String) {
