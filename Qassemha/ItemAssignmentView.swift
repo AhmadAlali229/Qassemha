@@ -11,6 +11,7 @@ struct ItemAssignmentView: View {
     let receipt: Receipt
     @Binding var configuration: SplitConfiguration
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var currencyManager = CurrencyManager.shared
     @StateObject private var manager = BillSplitManager.shared
 
     @State private var selectedItem: ReceiptItem?
@@ -242,6 +243,7 @@ struct ItemAssignmentRow: View {
     let participants: [Participant]
     let onTap: () -> Void
     let onQuickAssign: (Participant) -> Void
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     var assignedParticipants: [Participant] {
         participants.filter { assignment.participants.contains($0.id) }
@@ -277,7 +279,7 @@ struct ItemAssignmentRow: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("$\(item.totalPrice, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: item.totalPrice))
                         .font(.system(size: 16, weight: .bold))
                         .foregroundColor(.primary)
 
@@ -458,6 +460,7 @@ struct ParticipantAssignmentSummary: View {
     let participant: Participant
     let items: [ReceiptItem]
     let total: Double
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     var body: some View {
         HStack(spacing: 12) {
@@ -482,7 +485,7 @@ struct ParticipantAssignmentSummary: View {
 
             Spacer()
 
-            Text("$\(total, specifier: "%.2f")")
+            Text(currencyManager.format(amount: total))
                 .font(.system(size: 17, weight: .bold))
                 .foregroundColor(.blue)
         }

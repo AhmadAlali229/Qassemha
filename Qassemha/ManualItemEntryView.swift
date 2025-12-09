@@ -10,6 +10,7 @@ import SwiftUI
 struct ManualItemEntryView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = ManualEntryViewModel()
+    @ObservedObject private var currencyManager = CurrencyManager.shared
     @State private var showingSuccess = false
 
     var body: some View {
@@ -185,7 +186,7 @@ struct ManualItemEntryView: View {
 
                                     Spacer()
 
-                                    Text("$\(viewModel.subtotal, specifier: "%.2f")")
+                                    Text(currencyManager.format(amount: viewModel.subtotal))
                                         .font(.system(size: 16, weight: .semibold))
                                         .foregroundColor(.primary)
                                 }
@@ -227,7 +228,7 @@ struct ManualItemEntryView: View {
 
                                     Spacer()
 
-                                    Text("$\(viewModel.total, specifier: "%.2f")")
+                                    Text(currencyManager.format(amount: viewModel.total))
                                         .font(.system(size: 18, weight: .bold))
                                         .foregroundColor(.primary)
                                 }
@@ -345,6 +346,7 @@ struct ManualItemRow: View {
     let item: ManualReceiptItem
     let onEdit: () -> Void
     let onDelete: () -> Void
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     var body: some View {
         HStack(spacing: 12) {
@@ -373,7 +375,7 @@ struct ManualItemRow: View {
                             .foregroundColor(.blue)
                     }
 
-                    Text("$\(item.unitPrice, specifier: "%.2f")")
+                    Text(currencyManager.format(amount: item.unitPrice))
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.secondary)
 
@@ -389,7 +391,7 @@ struct ManualItemRow: View {
 
             // Total Price and Actions
             HStack(spacing: 8) {
-                Text("$\(item.totalPrice, specifier: "%.2f")")
+                Text(currencyManager.format(amount: item.totalPrice))
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.primary)
 
@@ -420,6 +422,7 @@ struct AddItemView: View {
     let item: ManualReceiptItem?
     let onSave: (ManualReceiptItem) -> Void
     let onCancel: () -> Void
+    @ObservedObject private var currencyManager = CurrencyManager.shared
 
     @State private var name: String = ""
     @State private var quantity: Double = 1.0
@@ -585,14 +588,14 @@ struct AddItemView: View {
                                     .font(.system(size: 16, weight: .medium))
                                     .foregroundColor(.secondary)
                             } else {
-                                Text("$\(unitPrice, specifier: "%.2f")")
+                                Text(currencyManager.format(amount: unitPrice))
                                     .font(.system(size: 16, weight: .medium))
                                     .foregroundColor(.secondary)
                             }
 
                             Spacer()
 
-                            Text("$\(totalPrice, specifier: "%.2f")")
+                            Text(currencyManager.format(amount: totalPrice))
                                 .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.primary)
                         }
