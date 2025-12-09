@@ -1068,13 +1068,11 @@ struct ExportOptionsView: View {
     enum ExportFormat: String, CaseIterable {
         case pdf = "PDF"
         case csv = "CSV"
-        case json = "JSON"
 
         var icon: String {
             switch self {
             case .pdf: return "doc.fill"
             case .csv: return "tablecells"
-            case .json: return "curlybraces"
             }
         }
 
@@ -1082,7 +1080,6 @@ struct ExportOptionsView: View {
             switch self {
             case .pdf: return "Professional PDF report with charts"
             case .csv: return "Spreadsheet-compatible format"
-            case .json: return "Raw data for developers"
             }
         }
     }
@@ -1222,8 +1219,6 @@ struct ExportOptionsView: View {
                 url = generatePDFReport()
             case .csv:
                 url = generateCSV()
-            case .json:
-                url = generateJSON()
             }
 
             // Update UI on main thread
@@ -1347,42 +1342,6 @@ struct ExportOptionsView: View {
         }
     }
 
-    private func generateJSON() -> URL? {
-        let timestamp = Date().timeIntervalSince1970
-        let fileName = "qassemha_transactions_\(Int(timestamp)).json"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
-
-        // Remove old file if exists
-        try? FileManager.default.removeItem(at: url)
-
-        let exportData = transactions.map { transaction in
-            return [
-                "id": transaction.id.uuidString,
-                "title": transaction.title,
-                "date": ISO8601DateFormatter().string(from: transaction.date),
-                "amount": transaction.total,
-                "currency": transaction.currency,
-                "status": transaction.status,
-                "category": transaction.category,
-                "type": transaction.type == .receipt ? "receipt" : "transaction"
-            ] as [String: Any]
-        }
-
-        do {
-            let jsonData = try JSONSerialization.data(withJSONObject: exportData, options: .prettyPrinted)
-            try jsonData.write(to: url, options: .atomic)
-
-            // Verify file was written
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                return nil
-            }
-
-            return url
-        } catch {
-            print("Error generating JSON: \(error)")
-            return nil
-        }
-    }
 }
 
 struct ShareSheet: UIViewControllerRepresentable {
