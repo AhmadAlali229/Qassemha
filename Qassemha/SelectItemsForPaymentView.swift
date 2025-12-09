@@ -34,8 +34,9 @@ struct SelectItemsForPaymentView: View {
     private var totalAmount: Double {
         guard let youId = youParticipant?.id else { return 0.0 }
 
-        var total: Double = 0.0
+        var subtotal: Double = 0.0
 
+        // Calculate subtotal for selected items
         for itemId in selectedItems {
             if let item = receipt.items.first(where: { $0.id == itemId }) {
                 if let assignment = configuration.itemAssignments.first(where: { $0.itemId == itemId }) {
@@ -51,12 +52,17 @@ struct SelectItemsForPaymentView: View {
                         itemAmount = assignment.customSplits[youId] ?? 0
                     }
 
-                    total += itemAmount
+                    subtotal += itemAmount
                 }
             }
         }
 
-        return total
+        // Calculate proportional tax and tip
+        let proportionalFactor = receipt.subtotal > 0 ? subtotal / receipt.subtotal : 0
+        let taxAmount = configuration.includeTax ? receipt.tax * proportionalFactor : 0
+        let tipAmount = configuration.includeTip ? receipt.tip * proportionalFactor : 0
+
+        return subtotal + taxAmount + tipAmount
     }
 
     var body: some View {
