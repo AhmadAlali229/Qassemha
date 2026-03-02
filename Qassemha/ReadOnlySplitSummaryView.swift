@@ -15,15 +15,10 @@ struct ReadOnlySplitSummaryView: View {
     @StateObject private var walletManager = WalletManager.shared
 
     @State private var selectedSummary: SplitSummary?
-<<<<<<< HEAD
-=======
-    @State private var participantToPay: SplitSummary?
->>>>>>> 6f95081 (Add multi-currency support (SAR/USD) and fix transaction status display)
     @State private var localConfig: SplitConfiguration
     @State private var showInsufficientFundsAlert = false
     @State private var insufficientAmount: Double = 0.0
     @State private var showAddFunds = false
-<<<<<<< HEAD
     @State private var showItemSelection = false
     @State private var paymentData: PaymentData?
     @State private var selectedItemsForPayment: Set<UUID> = []
@@ -33,8 +28,6 @@ struct ReadOnlySplitSummaryView: View {
         let amount: Double
         let selectedItems: Set<UUID>
     }
-=======
->>>>>>> 6f95081 (Add multi-currency support (SAR/USD) and fix transaction status display)
 
     init(receipt: Receipt, configuration: SplitConfiguration) {
         self.receipt = receipt
@@ -92,7 +85,6 @@ struct ReadOnlySplitSummaryView: View {
                 ParticipantDetailView(summary: summary, receipt: receipt)
             }
         }
-<<<<<<< HEAD
         .sheet(isPresented: $showAddFunds) {
             AddFundsView(isPresented: $showAddFunds)
         }
@@ -124,25 +116,6 @@ struct ReadOnlySplitSummaryView: View {
                 }
             )
         }
-=======
-        .sheet(item: $participantToPay) { participant in
-            PaymentMethodSelectionView(
-                isPresented: Binding(
-                    get: { participantToPay != nil },
-                    set: { if !$0 { participantToPay = nil } }
-                ),
-                amount: participant.total,
-                payeeName: participant.participant.name,
-                billSplitID: receipt.id.uuidString,
-                onPaymentComplete: { result in
-                    handlePaymentCompletion(for: participant, result: result)
-                }
-            )
-        }
-        .sheet(isPresented: $showAddFunds) {
-            AddFundsView(isPresented: $showAddFunds)
-        }
->>>>>>> 6f95081 (Add multi-currency support (SAR/USD) and fix transaction status display)
         .alert("Insufficient Funds", isPresented: $showInsufficientFundsAlert) {
             Button("Add Funds") {
                 showAddFunds = true
@@ -397,7 +370,6 @@ struct ReadOnlySplitSummaryView: View {
     // MARK: - Helper Methods
 
     private func handlePayNowClick(for summary: SplitSummary) {
-<<<<<<< HEAD
         // Show item selection for payment
         showItemSelection = true
     }
@@ -417,34 +389,6 @@ struct ReadOnlySplitSummaryView: View {
 
         // Refresh wallet data
         walletManager.refresh()
-=======
-        // Check if wallet has sufficient balance
-        let requiredAmount = summary.total
-        let currentBalance = walletManager.walletBalance
-
-        if currentBalance >= requiredAmount {
-            // Sufficient funds - proceed with payment
-            participantToPay = summary
-        } else {
-            // Insufficient funds - show alert
-            insufficientAmount = requiredAmount
-            showInsufficientFundsAlert = true
-        }
-    }
-
-    private func handlePaymentCompletion(for participant: SplitSummary, result: PaymentCompletionResult) {
-        // Simulate payment completion without saving to database
-        guard result.success else { return }
-
-        // Deduct amount from wallet
-        walletManager.deductFromWallet(amount: participant.total)
-
-        // Mark participant as paid locally
-        if !localConfig.paidParticipants.contains(participant.participant.id) {
-            localConfig.paidParticipants.append(participant.participant.id)
-        }
-        localConfig.updatedAt = Date()
->>>>>>> 6f95081 (Add multi-currency support (SAR/USD) and fix transaction status display)
     }
 }
 
