@@ -1021,46 +1021,22 @@ class DemoReceiptData: ObservableObject {
     // MARK: - Dynamic Parsing Helper Functions
 
     private func extractAllPrices(from text: String) -> [Double] {
-        // Skip lines that clearly aren't prices (phone numbers, addresses, codes, etc.)
-        let lowercased = text.lowercased()
-        if lowercased.contains("tel") || lowercased.contains("phone") ||
-           lowercased.contains("address") || lowercased.contains("street") ||
-           lowercased.contains("#") || lowercased.contains("code") ||
-           lowercased.contains("auth") || lowercased.contains("seq") ||
-           lowercased.contains("mer") || lowercased.contains("falls") ||
-           lowercased.contains("id ") || lowercased.contains("nj ") ||
-           text.count > 30 { // Long lines unlikely to be just prices
-            return []
-        }
-
-        // Only match standalone prices or prices with $ sign
-        let patterns = [
-            "^\\$?(\\d{1,3}\\.\\d{2})$",  // Standalone price: "12.99" or "$12.99"
-            "\\$+(\\d{1,3}\\.\\d{2})",    // Explicit $ sign: "$12.99"
-            "^(\\d{1,2}\\.\\d{2})$"       // Simple decimal only if 2 digits or less before decimal
-        ]
+        // Preserve extraction order: callers can use .last for line-item price.
+        let pattern = "(?<!\\d)(\\d{1,4}(?:,\\d{3})*\\.\\d{2})(?!\\d)"
+        let regex = try? NSRegularExpression(pattern: pattern)
+        let range = NSRange(location: 0, length: text.utf16.count)
+        let matches = regex?.matches(in: text, range: range) ?? []
 
         var prices: [Double] = []
-
-        for pattern in patterns {
-            let regex = try? NSRegularExpression(pattern: pattern)
-            let range = NSRange(location: 0, length: text.utf16.count)
-            let matches = regex?.matches(in: text, range: range) ?? []
-
-            for match in matches {
-                if match.numberOfRanges >= 2 {
-                    let priceRange = Range(match.range(at: 1), in: text)
-                    if let priceRange = priceRange {
-                        let priceString = String(text[priceRange])
-                        if let price = Double(priceString), price >= 0.01 && price < 100.0 {
-                            prices.append(price)
-                        }
-                    }
-                }
+        for match in matches {
+            guard match.numberOfRanges >= 2,
+                  let priceRange = Range(match.range(at: 1), in: text) else { continue }
+            let priceString = String(text[priceRange]).replacingOccurrences(of: ",", with: "")
+            if let price = Double(priceString), price >= 0.01 && price < 10000.0 {
+                prices.append(price)
             }
         }
-
-        return Array(Set(prices)).sorted() // Remove duplicates and sort
+        return prices
     }
 
     private func isStoreName(_ text: String, at index: Int) -> Bool {
@@ -1100,6 +1076,10 @@ class DemoReceiptData: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowercased = trimmed.lowercased()
 
+        if isHeaderRow(trimmed) {
+            return false
+        }
+
         // Exclude obvious non-items
         if lowercased.contains("thank you") || lowercased.contains("visit") ||
            lowercased.contains("help") || lowercased.contains("feedback") ||
@@ -1122,24 +1102,7 @@ class DemoReceiptData: ObservableObject {
     }
 
     private func extractItemName(from text: String) -> String? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Remove quantity prefix
-        if trimmed.hasPrefix("1 ") || trimmed.hasPrefix("2 ") || trimmed.hasPrefix("3 ") {
-            return String(trimmed.dropFirst(2)).trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        // Remove price suffix if exists
-        let pricePattern = "\\s+\\$?\\d+\\.\\d{2}\\s*$"
-        if let regex = try? NSRegularExpression(pattern: pricePattern) {
-            let range = NSRange(location: 0, length: trimmed.utf16.count)
-            let cleanedText = regex.stringByReplacingMatches(in: trimmed, range: range, withTemplate: "")
-            if !cleanedText.isEmpty {
-                return cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
-
-        return trimmed.isEmpty ? nil : trimmed
+        return normalizedItemName(from: text)
     }
 
     private func extractQuantity(from text: String) -> Double {
@@ -1158,6 +1121,59 @@ class DemoReceiptData: ObservableObject {
         }
 
         return 1.0
+    }
+
+    private func isHeaderRow(_ text: String) -> Bool {
+        let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if lower.isEmpty { return true }
+
+        let headerTokens = [
+            "qty", "quantity", "item", "items", "price", "unit price", "description",
+            "amount", "unit", "السعر", "الكمية", "الصنف", "الاجمالي", "الإجمالي"
+        ]
+
+        let matched = headerTokens.filter { lower.contains($0) }.count
+        return matched >= 2 || headerTokens.contains(lower)
+    }
+
+    private func containsArabicText(_ text: String) -> Bool {
+        return text.range(of: "\\p{Arabic}", options: .regularExpression) != nil
+    }
+
+    private func isArabicOnlyText(_ text: String) -> Bool {
+        let hasArabic = containsArabicText(text)
+        let hasLatin = text.range(of: "[A-Za-z]", options: .regularExpression) != nil
+        return hasArabic && !hasLatin
+    }
+
+    private func normalizedItemName(from text: String) -> String? {
+        var name = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty || isHeaderRow(name) { return nil }
+
+        // Ignore Arabic-only duplicate lines in bilingual OCR output.
+        if isArabicOnlyText(name) {
+            return nil
+        }
+
+        // Remove trailing price token (line item price is taken separately).
+        let pricePattern = "(?<!\\d)\\d{1,4}(?:,\\d{3})*\\.\\d{2}(?!\\d)"
+        if let regex = try? NSRegularExpression(pattern: pricePattern) {
+            let nsRange = NSRange(location: 0, length: name.utf16.count)
+            let matches = regex.matches(in: name, range: nsRange)
+            if let lastMatch = matches.last, let range = Range(lastMatch.range, in: name) {
+                name.removeSubrange(range)
+            }
+        }
+
+        // Remove leading quantity token such as "2" or "2x".
+        name = name.replacingOccurrences(
+            of: "^\\s*\\d+(?:\\.\\d+)?\\s*(?:x)?\\s*",
+            with: "",
+            options: .regularExpression
+        )
+        name = name.replacingOccurrences(of: "^[\\-:;,.\\s]+|[\\-:;,.\\s]+$", with: "", options: .regularExpression)
+
+        return name.isEmpty ? nil : name
     }
 
     private func isTotalKeyword(_ text: String) -> Bool {
@@ -2188,7 +2204,7 @@ class DemoReceiptData: ObservableObject {
         for (index, line, analysis) in structure.lineAnalyses {
             if analysis.isItemCandidate && !analysis.prices.isEmpty {
                 if let itemName = analysis.itemName,
-                   let price = analysis.prices.first {
+                   let price = analysis.prices.last {
 
                     let item = ReceiptItem(
                         name: itemName,
@@ -2785,6 +2801,14 @@ class DemoReceiptData: ObservableObject {
     private func extractItemFromLine(_ line: String) -> ReceiptItem? {
         print("    🔍 Trying to extract item from: '\(line)'")
 
+        if isHeaderRow(line) || isArabicOnlyText(line) {
+            return nil
+        }
+        let linePrices = extractAllPrices(from: line)
+        guard !linePrices.isEmpty else {
+            return nil
+        }
+
         // Multiple patterns for different receipt formats (especially fast food)
         let patterns = [
             "^(.+?)\\s+\\$?(\\d+\\.\\d{2})$",           // Standard: "Item Name $12.99"
@@ -2808,7 +2832,10 @@ class DemoReceiptData: ObservableObject {
                 let priceRange = Range(match.range(at: 2), in: line)
 
                 if let nameRange = nameRange, let priceRange = priceRange {
-                    let name = String(line[nameRange]).trimmingCharacters(in: .whitespaces)
+                    let rawName = String(line[nameRange]).trimmingCharacters(in: .whitespaces)
+                    guard let name = normalizedItemName(from: rawName), !name.isEmpty else {
+                        return nil
+                    }
                     let priceString = String(line[priceRange]).replacingOccurrences(of: ",", with: "") // Remove comma separators
                     print("    📋 Extracted name: '\(name)', price: '\(priceString)'")
 
@@ -2839,7 +2866,7 @@ class DemoReceiptData: ObservableObject {
 
                     print("    ✅ Name validation passed!")
 
-                    if let price = Double(priceString), price > 0 {
+                    if let price = linePrices.last, price > 0 {
                         // Determine item category based on name
                         let category = categorizeItem(name)
 
@@ -2865,6 +2892,10 @@ class DemoReceiptData: ObservableObject {
 
     private func tryFallbackParsing(_ line: String) -> ReceiptItem? {
         print("    🔄 Fallback parsing for: '\(line)'")
+
+        if isHeaderRow(line) || isArabicOnlyText(line) {
+            return nil
+        }
 
         // Look for price patterns anywhere in the line
         let pricePattern = "\\$?(\\d+\\.\\d{2})"
@@ -2902,14 +2933,18 @@ class DemoReceiptData: ObservableObject {
                         }
                     }
 
-                    if let price = Double(priceString), price > 0 {
+                    guard let normalizedName = normalizedItemName(from: itemName), !normalizedName.isEmpty else {
+                        return nil
+                    }
+
+                    if let price = extractAllPrices(from: line).last, price > 0 {
                         print("    ✅ Fallback parsing succeeded!")
                         return ReceiptItem(
-                            name: itemName,
+                            name: normalizedName,
                             quantity: 1,
                             unitPrice: price,
                             totalPrice: price,
-                            category: categorizeItem(itemName),
+                            category: categorizeItem(normalizedName),
                             tags: []
                         )
                     }
@@ -3048,3 +3083,5 @@ extension Receipt {
         return items.reduce(0) { $0 + $1.totalPrice }
     }
 }
+
+
