@@ -1,0 +1,3 @@
+# Local dev secrets (do not commit)
+Qassemha/Config/GroqConfig.local.plist
+.env.local
