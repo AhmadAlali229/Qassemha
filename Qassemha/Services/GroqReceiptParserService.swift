@@ -125,7 +125,15 @@ final class GroqReceiptParserService {
                 return nil
             }
 
-            return try JSONDecoder().decode(ParsedReceiptPayload.self, from: jsonData)
+            do {
+                return try JSONDecoder().decode(ParsedReceiptPayload.self, from: jsonData)
+            } catch {
+                #if DEBUG
+                print("Groq parser decode failure (\(model)): \(error.localizedDescription)")
+                print("Groq raw response (\(model)):\n\(content)")
+                #endif
+                return nil
+            }
         } catch {
             print("Groq parser error (\(model)): \(error.localizedDescription)")
             return nil
@@ -180,25 +188,42 @@ final class GroqReceiptParserService {
             partial + (item.total_price ?? 0)
         }
 
+        var normalizedSubtotal = payload.subtotal
+        var normalizedTax = payload.tax
+        var normalizedTip = payload.tip
+        var normalizedTotal = payload.total
+
         if let total = payload.total, total > 0 {
-            let tolerance = max(1.5, total * 0.25)
+            // Relaxed tolerance: receipts often include discounts/service/tax rounding.
+            let tolerance = max(3.0, total * 0.35)
             if abs(total - computedItemsTotal) > tolerance && computedItemsTotal > 0 {
-                return nil
+                #if DEBUG
+                print("Groq parser: totals mismatch, keeping items and clearing totals as unverified")
+                #endif
+                normalizedSubtotal = nil
+                normalizedTax = nil
+                normalizedTip = nil
+                normalizedTotal = nil
             }
         }
 
-        return ParsedReceiptPayload(
+        let normalizedPayload = ParsedReceiptPayload(
             store_name: payload.store_name?.trimmedNilIfEmpty,
             store_address: payload.store_address?.trimmedNilIfEmpty,
             receipt_date: payload.receipt_date?.trimmedNilIfEmpty,
             currency: payload.currency?.trimmedNilIfEmpty,
-            subtotal: payload.subtotal,
-            tax: payload.tax,
-            tip: payload.tip,
-            total: payload.total,
+            subtotal: normalizedSubtotal,
+            tax: normalizedTax,
+            tip: normalizedTip,
+            total: normalizedTotal,
             receipt_number: payload.receipt_number?.trimmedNilIfEmpty,
             items: normalizedItems
         )
+
+        #if DEBUG
+        print("Groq parser: normalized \(normalizedPayload.items.count) items")
+        #endif
+        return normalizedPayload
     }
 
     private func loadAPIKey() -> String? {
@@ -233,6 +258,67 @@ struct ParsedReceiptPayload: Decodable {
     let total: Double?
     let receipt_number: String?
     let items: [ParsedReceiptItem]
+
+    enum CodingKeys: String, CodingKey {
+        case store_name, storeName
+        case store_address, storeAddress
+        case receipt_date, receiptDate, date
+        case currency, currency_code
+        case subtotal, sub_total
+        case tax, vat
+        case tip, gratuity
+        case total, grand_total
+        case receipt_number, receiptNumber, invoice_number
+        case items, line_items
+    }
+
+    init(
+        store_name: String?,
+        store_address: String?,
+        receipt_date: String?,
+        currency: String?,
+        subtotal: Double?,
+        tax: Double?,
+        tip: Double?,
+        total: Double?,
+        receipt_number: String?,
+        items: [ParsedReceiptItem]
+    ) {
+        self.store_name = store_name
+        self.store_address = store_address
+        self.receipt_date = receipt_date
+        self.currency = currency
+        self.subtotal = subtotal
+        self.tax = tax
+        self.tip = tip
+        self.total = total
+        self.receipt_number = receipt_number
+        self.items = items
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+
+        self.store_name = try c.decodeIfPresent(String.self, forKey: .store_name)
+            ?? c.decodeIfPresent(String.self, forKey: .storeName)
+        self.store_address = try c.decodeIfPresent(String.self, forKey: .store_address)
+            ?? c.decodeIfPresent(String.self, forKey: .storeAddress)
+        self.receipt_date = try c.decodeIfPresent(String.self, forKey: .receipt_date)
+            ?? c.decodeIfPresent(String.self, forKey: .receiptDate)
+            ?? c.decodeIfPresent(String.self, forKey: .date)
+        self.currency = try c.decodeIfPresent(String.self, forKey: .currency)
+            ?? c.decodeIfPresent(String.self, forKey: .currency_code)
+        self.subtotal = try c.decodeFlexibleDouble(forKeys: [.subtotal, .sub_total])
+        self.tax = try c.decodeFlexibleDouble(forKeys: [.tax, .vat])
+        self.tip = try c.decodeFlexibleDouble(forKeys: [.tip, .gratuity])
+        self.total = try c.decodeFlexibleDouble(forKeys: [.total, .grand_total])
+        self.receipt_number = try c.decodeIfPresent(String.self, forKey: .receipt_number)
+            ?? c.decodeIfPresent(String.self, forKey: .receiptNumber)
+            ?? c.decodeIfPresent(String.self, forKey: .invoice_number)
+        self.items = try c.decodeIfPresent([ParsedReceiptItem].self, forKey: .items)
+            ?? c.decodeIfPresent([ParsedReceiptItem].self, forKey: .line_items)
+            ?? []
+    }
 }
 
 struct ParsedReceiptItem: Decodable {
@@ -240,6 +326,42 @@ struct ParsedReceiptItem: Decodable {
     let quantity: Double
     let unit_price: Double?
     let total_price: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case name, item, title, description
+        case quantity, qty, count
+        case unit_price, unitPrice
+        case total_price, totalPrice
+        case price
+    }
+
+    init(name: String, quantity: Double, unit_price: Double?, total_price: Double?) {
+        self.name = name
+        self.quantity = quantity
+        self.unit_price = unit_price
+        self.total_price = total_price
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+
+        self.name = (try c.decodeIfPresent(String.self, forKey: .name))
+            ?? (try c.decodeIfPresent(String.self, forKey: .item))
+            ?? (try c.decodeIfPresent(String.self, forKey: .title))
+            ?? (try c.decodeIfPresent(String.self, forKey: .description))
+            ?? ""
+
+        let qty = try c.decodeFlexibleDouble(forKeys: [.quantity, .qty, .count]) ?? 1
+        self.quantity = qty > 0 ? qty : 1
+
+        let unit = try c.decodeFlexibleDouble(forKeys: [.unit_price, .unitPrice])
+        let total = try c.decodeFlexibleDouble(forKeys: [.total_price, .totalPrice, .price])
+
+        // If only "price" or total exists, treat as total_price.
+        // If only unit_price exists, caller normalization will compute total_price.
+        self.unit_price = unit
+        self.total_price = total
+    }
 }
 
 private struct ChatCompletionRequest: Encodable {
@@ -281,4 +403,26 @@ private enum ParseOutcome {
     case valid(ParsedReceiptPayload)
     case invalidPayload
     case requestFailed
+}
+
+private extension KeyedDecodingContainer {
+    func decodeFlexibleDouble(forKeys keys: [K]) throws -> Double? {
+        for key in keys {
+            if let v = try decodeIfPresent(Double.self, forKey: key) {
+                return v
+            }
+            if let i = try decodeIfPresent(Int.self, forKey: key) {
+                return Double(i)
+            }
+            if let s = try decodeIfPresent(String.self, forKey: key) {
+                let cleaned = s
+                    .replacingOccurrences(of: ",", with: "")
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if let d = Double(cleaned) {
+                    return d
+                }
+            }
+        }
+        return nil
+    }
 }
