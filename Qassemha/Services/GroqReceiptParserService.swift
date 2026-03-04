@@ -85,6 +85,12 @@ final class GroqReceiptParserService {
         }
 
         Rules:
+        - "items" must include ONLY purchased products/services (menu lines, goods, actual billable items).
+        - EXCLUDE all summary/payment/accounting lines from "items".
+        - Excluded summary/payment lines include (not exhaustive):
+          - English: subtotal, total, grand total, tax, VAT, tip, gratuity, discount, payment, paid, card, cash, change, amount due, balance, tender.
+          - Arabic: المجموع، الإجمالي، الاجمالي، الضريبة، ضريبة القيمة المضافة، خصم، المدفوع، مدفوع، شبكة، كاش، نقدًا، نقدا، الباقي.
+        - Summary values must go into subtotal/tax/tip/total fields only, not as items.
         - items is required and must be non-empty.
         - Every item must include name and quantity.
         - Every item must include at least one of unit_price or total_price.
@@ -145,7 +151,15 @@ final class GroqReceiptParserService {
 
         for item in payload.items {
             let trimmedName = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedName.isEmpty else { return nil }
+            guard !trimmedName.isEmpty else { continue }
+
+            // Post-parse safeguard: drop summary/payment or invalid pseudo-items.
+            if shouldDropParsedItemName(trimmedName) {
+                #if DEBUG
+                print("Groq parser: dropped non-item line '\(trimmedName)'")
+                #endif
+                continue
+            }
 
             let quantity = item.quantity > 0 ? item.quantity : 1
 
@@ -169,7 +183,7 @@ final class GroqReceiptParserService {
                 normalizedTotal = t
                 normalizedUnit = quantity > 0 ? (t / quantity) : t
             case (.none, .none):
-                return nil
+                continue
             }
 
             normalizedItems.append(
@@ -410,6 +424,20 @@ private enum ParseOutcome {
     case requestFailed
 }
 
+private let summaryOrPaymentKeywords: [String] = [
+    // English summary/payment terms
+    "subtotal", "sub total", "total", "grand total", "amount due", "balance", "tax", "vat",
+    "tip", "gratuity", "discount", "payment", "paid", "tender", "card", "cash", "change",
+    "credit", "debit", "net", "service charge",
+    // Arabic summary/payment terms
+    "المجموع", "الاجمالي", "الإجمالي", "الضريبة", "ضريبة", "ضريبة القيمة المضافة",
+    "خصم", "المدفوع", "مدفوع", "شبكة", "كاش", "نقدا", "نقدًا", "الباقي", "المتبقي"
+]
+
+private let genericInvalidItemNames: Set<String> = [
+    "item", "items", "product", "products", "line", "line item", "unknown item"
+]
+
 private extension KeyedDecodingContainer {
     func decodeFlexibleDouble(forKeys keys: [K]) throws -> Double? {
         for key in keys {
@@ -430,4 +458,43 @@ private extension KeyedDecodingContainer {
         }
         return nil
     }
+}
+
+private func shouldDropParsedItemName(_ rawName: String) -> Bool {
+    let normalized = rawName
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+
+    if normalized.isEmpty {
+        return true
+    }
+
+    if genericInvalidItemNames.contains(normalized) {
+        return true
+    }
+
+    for keyword in summaryOrPaymentKeywords {
+        if normalized.contains(keyword.lowercased()) {
+            return true
+        }
+    }
+
+    // Drop names that are mostly numbers/symbols (e.g., "193.04", "# 28.96", "-- 12.00").
+    let nonWhitespaceChars = normalized.filter { !$0.isWhitespace }
+    if nonWhitespaceChars.isEmpty {
+        return true
+    }
+    let alphaNumCount = nonWhitespaceChars.filter { $0.isLetter || $0.isNumber }.count
+    let symbolCount = nonWhitespaceChars.count - alphaNumCount
+    if Double(symbolCount) / Double(nonWhitespaceChars.count) > 0.6 {
+        return true
+    }
+
+    // If alphanumeric content is all numeric, treat as invalid item name.
+    let lettersDigitsOnly = nonWhitespaceChars.filter { $0.isLetter || $0.isNumber }
+    if !lettersDigitsOnly.isEmpty && lettersDigitsOnly.allSatisfy({ $0.isNumber }) {
+        return true
+    }
+
+    return false
 }
