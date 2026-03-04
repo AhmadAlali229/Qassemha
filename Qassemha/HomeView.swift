@@ -1172,7 +1172,7 @@ struct BillSplitCard: View {
 
 struct FallbackAttributionView: View {
     var body: some View {
-        Text("By: Ahmad Alali & Bader alqahtani")
+        Text("By: Ahmad Alali & Bader alqahtani V5")
             .font(.system(size: 16, weight: .semibold, design: .rounded))
             .foregroundStyle(
                 LinearGradient(
@@ -1213,7 +1213,7 @@ struct LiquidGlassAttributionView: View {
     let timer = Timer.publish(every: 1/10, on: .current, in: .common).autoconnect()
 
     var body: some View {
-        Text("By: Ahmad Alali & Bader alqahtani")
+        Text("By: Ahmad Alali & Bader alqahtani V5")
             .font(.system(size: 16, weight: .semibold, design: .rounded))
             .foregroundColor(.white)
             .padding(.horizontal, 16)

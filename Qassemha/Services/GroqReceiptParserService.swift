@@ -43,7 +43,7 @@ final class GroqReceiptParserService {
             return .requestFailed
         }
 
-        guard let normalized = normalizeAndValidate(raw) else {
+        guard let normalized = normalizeAndValidate(raw, ocrText: text) else {
             print("Groq parser: JSON failed validation for model \(model)")
             return .invalidPayload
         }
@@ -85,6 +85,9 @@ final class GroqReceiptParserService {
         }
 
         Rules:
+        - Preserve the receipt currency.
+        - If OCR shows SAR / SR / ر.س / ريال, set "currency" to "SAR".
+        - Do not default to USD when Saudi currency indicators exist.
         - "items" must include ONLY purchased products/services (menu lines, goods, actual billable items).
         - EXCLUDE all summary/payment/accounting lines from "items".
         - Excluded summary/payment lines include (not exhaustive):
@@ -146,7 +149,7 @@ final class GroqReceiptParserService {
         }
     }
 
-    private func normalizeAndValidate(_ payload: ParsedReceiptPayload) -> ParsedReceiptPayload? {
+    private func normalizeAndValidate(_ payload: ParsedReceiptPayload, ocrText: String) -> ParsedReceiptPayload? {
         var normalizedItems: [ParsedReceiptItem] = []
 
         for item in payload.items {
@@ -225,7 +228,7 @@ final class GroqReceiptParserService {
             store_name: payload.store_name?.trimmedNilIfEmpty,
             store_address: payload.store_address?.trimmedNilIfEmpty,
             receipt_date: payload.receipt_date?.trimmedNilIfEmpty,
-            currency: payload.currency?.trimmedNilIfEmpty,
+            currency: inferredCurrency(from: payload.currency, ocrText: ocrText),
             subtotal: normalizedSubtotal,
             tax: normalizedTax,
             tip: normalizedTip,
@@ -258,6 +261,32 @@ final class GroqReceiptParserService {
         }
 
         return nil
+    }
+
+    private func inferredCurrency(from modelCurrency: String?, ocrText: String) -> String? {
+        let rawModel = modelCurrency?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let modelUpper = rawModel?.uppercased() ?? ""
+        let ocrLower = ocrText.lowercased()
+
+        // Explicit model currency wins when unambiguous.
+        if ["SAR", "AED", "USD", "EUR", "GBP"].contains(modelUpper) {
+            return modelUpper
+        }
+        if modelUpper == "SR" || modelUpper == "ر.س" || (rawModel?.contains("ريال") == true) {
+            return "SAR"
+        }
+
+        // OCR-based SAR inference when model value is missing/ambiguous (like "$").
+        let sarSignals = [" sar ", "sar", "sr", "ر.س", "ريال", "السعود", "الرياض", "ضريبة القيمة المضافة"]
+        if sarSignals.contains(where: { ocrLower.contains($0.lowercased()) }) {
+            return "SAR"
+        }
+
+        // Preserve non-empty unknown value, otherwise nil so mapper can infer.
+        guard let rawModel, !rawModel.isEmpty, modelUpper != "$" else {
+            return nil
+        }
+        return modelUpper
     }
 }
 

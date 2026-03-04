@@ -333,7 +333,7 @@ struct CameraCaptureView: View {
             tax: tax,
             tip: tip,
             total: total,
-            currency: normalizeCurrency(payload.currency),
+            currency: normalizeCurrency(payload.currency, ocrText: fallbackDateText),
             receiptNumber: payload.receipt_number?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
             imageData: imageData,
             scanType: .camera,
@@ -368,15 +368,20 @@ struct CameraCaptureView: View {
         )
     }
 
-    private func normalizeCurrency(_ input: String?) -> String {
-        guard let raw = input?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
-            return "USD"
+    private func normalizeCurrency(_ input: String?, ocrText: String) -> String {
+        let raw = input?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let ocrLower = ocrText.lowercased()
+        let hasSarSignal = [" sar ", "sar", "sr", "ر.س", "ريال", "السعود", "الرياض", "ضريبة القيمة المضافة"]
+            .contains { ocrLower.contains($0.lowercased()) }
+
+        if raw.isEmpty {
+            return hasSarSignal ? "SAR" : "USD"
         }
 
         let upper = raw.uppercased()
         switch upper {
         case "$", "USD":
-            return "USD"
+            return hasSarSignal ? "SAR" : "USD"
         case "SAR", "SR", "ر.س":
             return "SAR"
         case "AED":
@@ -386,7 +391,7 @@ struct CameraCaptureView: View {
         case "GBP", "£":
             return "GBP"
         default:
-            return upper
+            return hasSarSignal ? "SAR" : upper
         }
     }
 }
