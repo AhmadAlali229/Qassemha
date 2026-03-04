@@ -345,10 +345,15 @@ struct ParsedReceiptItem: Decodable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
 
-        self.name = (try c.decodeIfPresent(String.self, forKey: .name))
-            ?? (try c.decodeIfPresent(String.self, forKey: .item))
-            ?? (try c.decodeIfPresent(String.self, forKey: .title))
-            ?? (try c.decodeIfPresent(String.self, forKey: .description))
+        let decodedName = try c.decodeIfPresent(String.self, forKey: .name)
+        let decodedItem = try c.decodeIfPresent(String.self, forKey: .item)
+        let decodedTitle = try c.decodeIfPresent(String.self, forKey: .title)
+        let decodedDescription = try c.decodeIfPresent(String.self, forKey: .description)
+
+        self.name = decodedName
+            ?? decodedItem
+            ?? decodedTitle
+            ?? decodedDescription
             ?? ""
 
         let qty = try c.decodeFlexibleDouble(forKeys: [.quantity, .qty, .count]) ?? 1
